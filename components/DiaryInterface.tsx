@@ -29,6 +29,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
   const [selectedHistoryEntry, setSelectedHistoryEntry] = useState<DiaryEntry | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isPlayingText, setIsPlayingText] = useState(false);
+  const [isMobileDetailSelected, setIsMobileDetailSelected] = useState(false);
 
   // Save changes to localStorage
   useEffect(() => {
@@ -51,6 +52,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
       setDiaries(prev => [newEntry, ...prev]);
       setCurrentAnalysis(result);
       setSelectedHistoryEntry(newEntry);
+      setIsMobileDetailSelected(true);
       
       // Award XP for diary learning!
       onXpUpdate(35); // Rewards 35 XP for writing and correcting a diary
@@ -146,6 +148,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
         <button
           onClick={() => {
             setActiveTab('history');
+            setIsMobileDetailSelected(false);
             if (diaries.length > 0 && !selectedHistoryEntry) {
               setSelectedHistoryEntry(diaries[0]);
             }
@@ -238,7 +241,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
             className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
           >
             {/* Left Column: Historical List */}
-            <div className="lg:col-span-4 bg-white border border-zinc-200 rounded-3xl p-4 space-y-3 shadow-xs">
+            <div className={`lg:col-span-4 bg-white border border-zinc-200 rounded-3xl p-4 space-y-3 shadow-xs ${isMobileDetailSelected ? 'hidden lg:block' : 'block'}`}>
               <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
                 <h3 className="text-xs sm:text-sm font-black text-zinc-900 tracking-tight flex items-center gap-1.5">
                   <Calendar size={14} className="text-zinc-400" />
@@ -246,7 +249,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                 </h3>
                 <button
                   onClick={() => setActiveTab('write')}
-                  className="p-1 px-2 text-[10px] sm:text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-all rounded-lg flex items-center gap-1"
+                  className="p-1 px-2 text-[10px] sm:text-xs font-black text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition-all rounded-lg flex items-center gap-1 border border-zinc-200"
                 >
                   <Plus size={10} /> 寫新日記
                 </button>
@@ -258,44 +261,62 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                   <p className="text-[10px] text-zinc-300 mt-1">請切換到「撰寫」頁面開始寫第一篇日記吧。</p>
                 </div>
               ) : (
-                <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-2 no-scrollbar">
+                <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-2.5 no-scrollbar">
                   {diaries.map((entry) => {
                     const isSelected = displayEntry?.id === entry.id;
                     return (
                       <div
                         key={entry.id}
-                        onClick={() => setSelectedHistoryEntry(entry)}
-                        className={`p-3.5.5 rounded-2xl border text-left cursor-pointer transition-all ${
+                        onClick={() => {
+                          setSelectedHistoryEntry(entry);
+                          setIsMobileDetailSelected(true);
+                        }}
+                        className={`p-4 rounded-2xl border text-left cursor-pointer transition-all ${
                           isSelected
-                            ? 'bg-zinc-900 border-zinc-900 text-white shadow-md'
-                            : 'bg-zinc-50/50 border-zinc-150 hover:bg-zinc-50 text-zinc-800'
+                            ? 'bg-zinc-100 border-zinc-350 text-zinc-900 shadow-xs ring-1 ring-zinc-200/50'
+                            : 'bg-white border-zinc-200 hover:bg-zinc-50/50 hover:border-zinc-300 text-zinc-800'
                         }`}
                       >
-                        <div className="flex justify-between items-start gap-1 mb-1.5">
+                        {/* 突出大日期 */}
+                        <div className="flex justify-between items-center gap-1.5 pb-2 border-b border-dashed border-zinc-200">
+                          <div className="flex items-center gap-2">
+                            <Calendar size={14} className={isSelected ? 'text-zinc-700' : 'text-zinc-400'} />
+                            <span className={`text-sm font-black font-mono tracking-wide ${isSelected ? 'text-zinc-900' : 'text-zinc-600'}`}>
+                              {entry.date}
+                            </span>
+                          </div>
+                          
                           <span
-                            className={`text-[9px] font-sans font-black tracking-wide rounded-md px-1.5 py-0.5 ${
+                            className={`text-[9.5px] font-sans font-black tracking-wide rounded px-1.5 py-0.5 ${
                               isSelected
-                                ? 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-100/30'
+                                ? 'bg-zinc-250 text-zinc-850 border border-zinc-350'
+                                : 'bg-zinc-100 text-zinc-650 border border-zinc-200'
                             }`}
                           >
                             {entry.analysis?.jlptEstimatedLevel || 'N5'}
                           </span>
-                          <span className={`text-[10px] font-medium font-mono ${isSelected ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                            {entry.date}
-                          </span>
                         </div>
-                        <h4 className="text-xs sm:text-sm font-bold truncate leading-tight mb-2">
-                          {entry.analysis?.title || '未命名日記'}
-                        </h4>
-                        <p className={`text-[11px] truncate leading-normal ${isSelected ? 'text-zinc-350' : 'text-zinc-450'}`}>
-                          {entry.content}
-                        </p>
-                        <div className="flex justify-end gap-1.5 mt-2 border-t border-dashed border-zinc-200/10 pt-1.5">
+
+                        {/* 標題與引導元件 */}
+                        <div className="mt-2.5 flex justify-between items-center gap-2">
+                          <h4 className={`text-xs font-black truncate leading-tight flex-1 ${isSelected ? 'text-zinc-900 font-extrabold' : 'text-zinc-700 font-bold'}`}>
+                            {entry.analysis?.title || '未命名日記'}
+                          </h4>
+                          <ChevronRight size={14} className={isSelected ? 'text-zinc-700' : 'text-zinc-400'} />
+                        </div>
+
+                        {/* 精巧底欄控制 */}
+                        <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-dashed border-zinc-200">
+                          <p className={`text-[10px] truncate max-w-[75%] font-medium ${isSelected ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                            {entry.content}
+                          </p>
                           <button
-                            onClick={(e) => handleDeleteDiary(entry.id, e)}
-                            className="p-1 rounded-md text-red-400 hover:text-red-500 hover:bg-red-50/5 transition-all text-[10px]"
-                            title="刪除"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteDiary(entry.id, e);
+                            }}
+                            className="p-1 rounded-md transition-all text-zinc-400 hover:text-red-500 hover:bg-red-50/50"
+                            title="刪除本日記"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -308,9 +329,19 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
             </div>
 
             {/* Right Column: Active Correction Report Details */}
-            <div className="lg:col-span-8 space-y-6">
+            <div className={`lg:col-span-8 space-y-6 ${isMobileDetailSelected ? 'block' : 'hidden lg:block'}`}>
               {displayEntry ? (
                 <div className="space-y-6">
+                  {/* 移動端專屬返回按鈕 */}
+                  <div className="lg:hidden">
+                    <button
+                      onClick={() => setIsMobileDetailSelected(false)}
+                      className="flex items-center gap-2 px-4 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-black rounded-2xl w-full justify-center transition-all border border-zinc-200"
+                    >
+                      ← 返回歷程清單 (查看其他日期)
+                    </button>
+                  </div>
+
                   {/* Summary Card */}
                   <div className="bg-white border border-zinc-200 rounded-3xl p-5 sm:p-6 shadow-xs relative overflow-hidden">
                     <span className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-black tracking-wider px-3.5 py-1 rounded-bl-2xl">
@@ -341,34 +372,49 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                       </p>
                     </div>
 
-                    {/* Full corrected version */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-black text-zinc-400 tracking-wider">Polished Full Text / 道地完整全文</span>
+                    {/* Parallel original and polished full text comparison */}
+                    <div className="space-y-3 pt-4 border-t border-zinc-150">
+                      <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                        <span className="text-[10px] font-black text-zinc-400 tracking-wider uppercase">完整全文對照 (Full Text Comparison)</span>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleSpeakText(displayEntry.analysis.correctedFullText)}
-                            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${
+                            className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-xl transition-all ${
                               isPlayingText 
                                 ? 'bg-red-50 text-red-600 border border-red-100' 
-                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
+                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-650'
                             }`}
                           >
                             <Volume2 size={12} />
-                            {isPlayingText ? '停止播放' : '慢速日語朗讀'}
+                            {isPlayingText ? '停止播放' : '慢速語音朗讀'}
                           </button>
                           <button
                             onClick={() => handleCopyText(displayEntry.analysis.correctedFullText, 999)}
-                            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-650 rounded-lg transition-all"
+                            className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-650 rounded-xl transition-all"
                           >
                             <Copy size={12} />
-                            {copiedIndex === 999 ? '已複製' : '複製全文'}
+                            {copiedIndex === 999 ? '已複製' : '關鍵全文複製'}
                           </button>
                         </div>
                       </div>
-                      <p className="bg-indigo-50/20 border border-indigo-100/30 rounded-2xl p-4 sm:p-5 text-sm sm:text-base text-zinc-800 font-extrabold leading-relaxed whitespace-pre-line tracking-wide shadow-3xs">
-                        {displayEntry.analysis.correctedFullText}
-                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Original Text Column */}
+                        <div className="bg-zinc-50 border border-zinc-200/60 rounded-2xl p-4 sm:p-5 relative">
+                          <div className="absolute top-2.5 right-3 px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-550 text-[8px] font-bold">我的原文</div>
+                          <p className="text-zinc-650 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-line mt-2">
+                            {displayEntry.content}
+                          </p>
+                        </div>
+
+                        {/* Polished Text Column */}
+                        <div className="bg-indigo-50/15 border border-indigo-100/30 rounded-2xl p-4 sm:p-5 relative">
+                          <div className="absolute top-2.5 right-3 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[8px] font-bold">極致精修全文</div>
+                          <p className="text-zinc-900 text-sm sm:text-base font-black leading-relaxed whitespace-pre-line mt-2 tracking-wide text-pretty">
+                            {displayEntry.analysis.correctedFullText}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -410,61 +456,70 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                   {/* Detailed comparisons sentence-by-sentence */}
                   <div className="space-y-4">
                     <h3 className="text-xs sm:text-sm font-black text-zinc-400 uppercase tracking-widest pl-1">
-                      句子逐句詳細對比與解析說明
+                      重點大錯誤 & 用詞錯誤修正 (此處不顯示微調)
                     </h3>
-                    <div className="space-y-4">
-                      {displayEntry.analysis.corrections.map((corr, idx) => {
-                        const hasCorrection = corr.originalText !== corr.correctedText;
-                        return (
-                          <div
-                            key={idx}
-                            className="bg-white border border-zinc-150 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3 hover:border-zinc-300 transition-all"
-                          >
-                            <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-1">
-                              <span className="text-[9px] font-sans font-black bg-zinc-100 text-zinc-500 border px-1.5 py-0.5 rounded-md">句子 0{idx + 1}</span>
-                              <span className={`text-[10px] font-bold ${hasCorrection ? 'text-indigo-600' : 'text-emerald-600'}`}>
-                                {hasCorrection ? '● 句型已修正/優化' : '● 原創極佳，不需修改'}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1.5">
-                                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">我的原文 (Original)</span>
-                                <p className="text-xs sm:text-sm text-zinc-500 font-medium line-through bg-red-50/10 border border-red-100/10 p-3 rounded-2xl">
-                                  {corr.originalText}
-                                </p>
+                    
+                    {displayEntry.analysis.corrections && displayEntry.analysis.corrections.length > 0 ? (
+                      <div className="space-y-4">
+                        {displayEntry.analysis.corrections.map((corr, idx) => {
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-white border border-zinc-150 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3 hover:border-zinc-350 transition-all"
+                            >
+                              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-1">
+                                <span className="text-[9px] font-sans font-black bg-zinc-100 text-zinc-550 border px-1.5 py-0.5 rounded-md">句子 0{idx + 1}</span>
+                                <span className="text-[10px] font-black text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                                  ● 重點文法/用詞修正
+                                </span>
                               </div>
 
-                              <div className="space-y-1.5">
-                                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-wider block">道地改良 (Corrected)</span>
-                                <p className="text-xs sm:text-sm text-zinc-800 font-extrabold bg-emerald-50/10 border border-emerald-100/10 p-3 rounded-2xl leading-relaxed">
-                                  {corr.correctedText}
-                                </p>
-                              </div>
-                            </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                  <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">我的原文 (Original)</span>
+                                  <p className="text-xs sm:text-sm text-zinc-500 font-medium line-through bg-zinc-50 border border-zinc-150 p-3 rounded-2xl">
+                                    {corr.originalText}
+                                  </p>
+                                </div>
 
-                            {/* Analysis note */}
-                            <div className="border-t border-dashed border-zinc-100 pt-3 flex items-start gap-1.5">
-                              <span className="bg-indigo-50 text-indigo-700 text-[9px] font-black px-1 rounded-md mt-0.5">解析</span>
-                              <div className="space-y-1">
-                                <p className="text-zinc-650 text-xs sm:text-[13px] font-medium leading-relaxed">
-                                  {corr.explanation}
-                                </p>
-                                {corr.grammarPoints && corr.grammarPoints.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 items-center mt-2">
-                                    {corr.grammarPoints.map((gp, gIdx) => (
-                                      <span key={gIdx} className="bg-zinc-100 border border-zinc-200/50 text-zinc-600 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
-                                        {gp}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
+                                <div className="space-y-1.5">
+                                  <span className="text-[9px] font-black text-indigo-500 uppercase tracking-wider block">道地修正 (Corrected)</span>
+                                  <p className="text-xs sm:text-sm text-zinc-900 font-extrabold bg-indigo-50/15 border border-indigo-100/30 p-3 rounded-2xl leading-relaxed">
+                                    {corr.correctedText}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Analysis note */}
+                              <div className="border-t border-dashed border-zinc-150 pt-3 flex items-start gap-1.5">
+                                <span className="bg-indigo-50 text-indigo-750 text-[9px] font-black px-1.5 py-0.5 rounded mt-0.5">解析說明</span>
+                                <div className="space-y-1">
+                                  <p className="text-zinc-700 text-xs sm:text-[13px] font-bold leading-relaxed">
+                                    {corr.explanation}
+                                  </p>
+                                  {corr.grammarPoints && corr.grammarPoints.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 items-center mt-2">
+                                      {corr.grammarPoints.map((gp, gIdx) => (
+                                        <span key={gIdx} className="bg-zinc-100 border border-zinc-200/50 text-zinc-650 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                                          {gp}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-50/40 border border-emerald-100/60 text-emerald-800 rounded-3xl p-6 text-center space-y-1 block">
+                        <p className="text-xs sm:text-sm font-black">🎉 寫得很棒！無重大語意或詞彙錯誤</p>
+                        <p className="text-[11px] text-emerald-600 font-medium">
+                          這篇日記中沒有需要特別糾正的嚴重文法、拼寫或用詞錯誤（用詞錯誤／大錯誤）。些微的句子流暢度潤色與修飾已直接包含在最上方的「極致精修全文」中囉！做得很好，請繼續保持寫作習慣！
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- WORD SCHEMA ---
 const wordDefinitionSchema = {
@@ -461,18 +461,18 @@ const diaryAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
     title: { type: Type.STRING, description: "Suggest a suitable, poetic, or descriptive title in Japanese for this diary entry. (Optional: provide Traditional Chinese translation alongside, e.g., 「雨の日（雨天）」)" },
-    correctedFullText: { type: Type.STRING, description: "The fully polished and corrected Japanese diary passage" },
+    correctedFullText: { type: Type.STRING, description: "The fully polished and corrected Japanese diary passage. Compare with original, fixing typos silently or grammar errors." },
     overallFeedback: { type: Type.STRING, description: "Warm, professional feedback in Traditional Chinese on their writing style, vocabulary, and grammar" },
-    jlptEstimatedLevel: { type: Type.STRING, description: "Estimated JLPT level of this text (e.g., N5, N4, N3, N2, N1)" },
+    jlptEstimatedLevel: { type: Type.STRING, description: "Estimated JLPT level of this text (e.g., N5, N4, N3)" },
     corrections: {
       type: Type.ARRAY,
-      description: "Sentence-by-sentence analysis of corrections",
+      description: "Sentence-by-sentence analysis of corrections. CRITICAL: ONLY generate correction entries for sentences that have significant, substantive errors (e.g. wrong grammar, major particle mistakes, or word selection errors/用詞錯誤/大錯誤). If a sentence has NO actual mistakes or only has extremely minor tweaks (like changing one word just for slightly better flow, or a basic punctuation fix), do NOT include it here. It is much better to have 0 or 1 significant correction cards than to show boring minor stylistic nitpicks.",
       items: {
         type: Type.OBJECT,
         properties: {
-          originalText: { type: Type.STRING, description: "The original Japanese sentence as written by the user" },
-          correctedText: { type: Type.STRING, description: "The corrected and polished Japanese sentence. If no correction is needed, keep it identical but explain that it is perfect!" },
-          explanation: { type: Type.STRING, description: "Clear and helpful explanation of why the correction was made, or general guidance / grammar tips (in Traditional Chinese)" },
+          originalText: { type: Type.STRING, description: "The original Japanese sentence written by the user" },
+          correctedText: { type: Type.STRING, description: "The corrected and polished Japanese sentence." },
+          explanation: { type: Type.STRING, description: "Direct and clear explanation in Traditional Chinese of why this error is incorrect and how to fix it." },
           grammarPoints: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
@@ -504,17 +504,29 @@ export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalys
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
-      You are an expert Japanese language tutor who corrects student diaries. 
-      Please analyze and correction this Japanese diary entry written by a student:
+      You are an expert Japanese language tutor who corrects student diaries, specializing in teaching beginners and intermediate learners (specifically JLPT N4/N5 level).
+      Please analyze and correct this Japanese diary entry written by a student:
       
       "${content}"
       
+      CRITICAL LEVEL RESTRICTION (N4/N5 Focus):
+      The corrections, polished sentences, suggested vocabulary, and grammar points MUST be tailored for a JLPT N4/N5 level learner:
+      1. Do NOT use advanced/formal/difficult vocabulary (N1/N2). At most, use common or helpful N3 level vocabulary/grammar if absolutely necessary for naturalness. Keep all words and grammar patterns friendly, simple, standard, and highly practical.
+      2. Do NOT over-correct. Keep the student's original tone, context, and ideas intact. Avoid turning simple, warm daily diary thoughts into cold, overly formal, high-level academic or technical written Japanese.
+      3. Polished sentences should sound natural, fluent, and idiomatic, but remain accessible and reading-friendly (mostly using N4/N5 vocabulary).
+      4. The 3-5 vocabulary or grammar points extracted MUST be simple, practical everyday words or grammar patterns that are highly useful for beginners or intermediate (N4/N5) Japanese learners to learn and build dialogue with.
+      
+      CRITICAL CORRECTION CARD SELECTION CONSTRAINT:
+      1. ONLY create items in the "corrections" list if the sentence contains an actual SIGNIFICANT spelling error, wrong particle usage, grammatically invalid structure, or severe word choice misuse (用詞錯誤、大錯誤).
+      2. If a sentence is grammatically correct and has NO major mistakes, do NOT include it in the "corrections" list.
+      3. Minor improvements (e.g. changing one character for a slightly "better" stylistic flow, adding minor particles that are optional, or choosing a slightly nicer synonym) SHOULD NOT be generated in the "corrections" list. Just apply these silent tweaks directly to the "correctedFullText" passage. Keep the corrections list clean so the user doesn't get overwhelmed with trivial style critiques. Always make sure the final corrected text stands out clearly so the user can easily observe the full diary context.
+      
       Tasks:
-      1. Correct all spelling, grammar, particles, and vocabulary errors.
-      2. Polish the sentences to make them sound like natural, idiomatic Japanese (such as using natural collocations, formal vs. informal consistency, and friendly diary style).
-      3. Provide detailed sentence-by-sentence corrections and explanations in Traditional Chinese (Taiwan).
-      4. Extract 3-5 vocabulary or grammar points from their diary with reading and Traditional Chinese meaning so they can review and memorize them.
-      5. Provide an overall encouragement score/grade/feedback in Traditional Chinese.
+      1. Correct all spelling, grammar, particles, and vocabulary errors based on the N4/N5 level.
+      2. Polish the sentences to make them sound like natural, idiomatic but simple and accessible Japanese (using N4/N5 friendly, polite or casual diary style, such as using -desu/-masu consistently unless they wrote casual).
+      3. Provide detailed sentence-by-sentence corrections and explanations in Traditional Chinese (Taiwan) ONLY for sentences with actual major errors.
+      4. Extract 3-5 suitable beginner/intermediate (N4/N5, at most N3) vocabulary words or grammar points from their diary with readings and Traditional Chinese meanings.
+      5. Provide an overall encouragement score/grade/feedback in Traditional Chinese, acknowledging their current level.
      `,
     config: {
       responseMimeType: "application/json",
