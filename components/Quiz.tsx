@@ -27,8 +27,32 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
       try {
         setLoading(true);
         const qs = await generateQuizFromContent(sourceWords, sourceGrammar, specificPrompt);
-        setQuestions(qs);
-        setUserAnswers(new Array(qs.length).fill(null));
+        
+        // Shuffle the options of each question to make sure options/correct index are distributed randomly
+        const shuffledQuestions = qs.map(q => {
+          if (!q.options || q.options.length <= 1) return q;
+
+          // Track original position of each option
+          const indexedOptions = q.options.map((opt, index) => ({ opt, index }));
+
+          // Fisher-Yates shuffle
+          for (let i = indexedOptions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indexedOptions[i], indexedOptions[j]] = [indexedOptions[j], indexedOptions[i]];
+          }
+
+          const shuffledOptions = indexedOptions.map(item => item.opt);
+          const newCorrectIndex = indexedOptions.findIndex(item => item.index === q.correctAnswerIndex);
+
+          return {
+            ...q,
+            options: shuffledOptions,
+            correctAnswerIndex: newCorrectIndex !== -1 ? newCorrectIndex : q.correctAnswerIndex
+          };
+        });
+
+        setQuestions(shuffledQuestions);
+        setUserAnswers(new Array(shuffledQuestions.length).fill(null));
       } catch (e) {
         console.error(e);
       } finally {

@@ -346,6 +346,8 @@ function App() {
   const [learningMethod, setLearningMethod] = useState<LearningMethod>('MANUAL');
   const [selectedLevel, setSelectedLevel] = useState<JLPTLevel>('N5');
   const [recommendCount, setRecommendCount] = useState<number>(5);
+  const [recommendWordCategory, setRecommendWordCategory] = useState<string>("日常用語");
+  const [showRecommendModal, setShowRecommendModal] = useState<boolean>(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentDefinitions, setCurrentDefinitions] = useState<WordDefinition[]>(() => {
@@ -562,7 +564,7 @@ function App() {
         else if (inputMode === 'GRAMMAR') newGrammar = await fetchGrammarDetails(input);
         else if (inputMode === 'READING') newReading = await analyzeReadingText(input);
       } else {
-        if (inputMode === 'WORD') newWords = await fetchRecommendedWords(selectedLevel, recommendCount, []);
+        if (inputMode === 'WORD') newWords = await fetchRecommendedWords(selectedLevel, recommendCount, [], recommendWordCategory);
         else if (inputMode === 'GRAMMAR') newGrammar = await fetchRecommendedGrammar(selectedLevel, recommendCount, []);
         else if (inputMode === 'READING') newReading = await generateRecommendedReading(selectedLevel);
       }
@@ -574,13 +576,21 @@ function App() {
       setActiveHistoryId(newId);
       
       const today = new Date().toISOString().split('T')[0];
+      const customHistoryInputText = learningMethod === 'MANUAL' 
+        ? input 
+        : inputMode === 'WORD' 
+          ? `[AI雙語詞彙] ${selectedLevel} • ${recommendWordCategory}` 
+          : inputMode === 'GRAMMAR' 
+            ? `[AI精緻文法] ${selectedLevel} 文法推薦` 
+            : `[AI情境文章] ${selectedLevel} 隨機主題文章`;
+
       setHistory(prev => [{ 
         id: newId, 
         date: today, 
         words: newWords, 
         grammar: newGrammar, 
         readings: newReading ? [newReading] : [],
-        userInput: learningMethod === 'MANUAL' ? input : `[${selectedLevel}] 推薦內容`,
+        userInput: customHistoryInputText,
         inputMode: inputMode,
         learningMethod: learningMethod
       }, ...prev]);
@@ -637,7 +647,16 @@ function App() {
                 <div className="flex bg-zinc-100/80 p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-zinc-200 relative">
                   <div className="grid grid-cols-3 w-full relative z-10 text-center">
                     {['MANUAL', 'RECOMMEND', 'QUIZ'].map((m) => (
-                      <button key={m} onClick={() => setLearningMethod(m as LearningMethod)} className={`py-2 sm:py-3 text-sm sm:text-base font-bold transition-all ${learningMethod === m ? 'text-black' : 'text-zinc-400'}`}>
+                      <button 
+                        key={m} 
+                        onClick={() => {
+                          setLearningMethod(m as LearningMethod);
+                          if (m === 'RECOMMEND') {
+                            setShowRecommendModal(true);
+                          }
+                        }} 
+                        className={`py-2 sm:py-3 text-sm sm:text-base font-bold transition-all ${learningMethod === m ? 'text-black' : 'text-zinc-400'}`}
+                      >
                         {m === 'MANUAL' ? '輸入' : m === 'RECOMMEND' ? '推薦' : '測驗'}
                       </button>
                     ))}
@@ -645,12 +664,54 @@ function App() {
                   <motion.div className="absolute inset-y-0.5 sm:inset-y-1 bg-white shadow-sm rounded-lg sm:rounded-xl border border-zinc-200" animate={{ x: learningMethod === 'MANUAL' ? '0%' : learningMethod === 'RECOMMEND' ? '100%' : '200%', width: '33.33%' }} />
                 </div>
 
-                <textarea
-                  className="w-full p-4 sm:p-8 bg-zinc-50/50 border border-zinc-200 rounded-2xl sm:rounded-[2rem] outline-none text-base sm:text-xl text-zinc-900 font-bold h-48 sm:h-64 shadow-inner resize-none"
-                  placeholder={learningMethod === 'QUIZ' ? "輸入想測驗的內容，AI 會為你出題..." : "請輸入內容..."} 
-                  value={input} 
-                  onChange={(e) => setInput(e.target.value)}
-                />
+                {learningMethod === 'RECOMMEND' ? (
+                  <div className="w-full p-6 sm:p-10 bg-zinc-50/70 border border-zinc-200/80 rounded-2xl sm:rounded-[2rem] flex flex-col items-center justify-center text-center space-y-6 shadow-inner min-h-[12rem] sm:min-h-[16rem]">
+                    <div className="p-3 sm:p-4 bg-zinc-900 text-white rounded-full shadow-md animate-bounce">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-300">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.187L15 15l-5.187.904zM18.007 7.007l-.507 2.493-2.493-.507L15 7l.507-2.493 2.493.507L18 7l-.007.007z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg sm:text-2xl font-black text-zinc-900">
+                        {inputMode === 'WORD' ? 'AI 雙語單字推薦' : inputMode === 'GRAMMAR' ? 'AI 系統文法推薦' : 'AI 隨機主題情境文章撰寫'}
+                      </h3>
+                      <p className="text-xs sm:text-base text-zinc-500 font-bold mt-2">
+                        {inputMode === 'WORD' ? (
+                          <span>
+                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級 • 學習系列：<span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{recommendWordCategory}</span>
+                          </span>
+                        ) : inputMode === 'GRAMMAR' ? (
+                          <span>
+                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級文法
+                          </span>
+                        ) : (
+                          <span>
+                            目前設定：JLPT <span className="text-zinc-950 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級隨機主題故事
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <button 
+                        type="button"
+                        onClick={() => setShowRecommendModal(true)} 
+                        className="px-4.5 py-2 text-xs sm:text-sm font-bold bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl transition shadow-sm flex items-center gap-2"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-zinc-500">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                        </svg>
+                        變更偏好設定
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full p-4 sm:p-8 bg-zinc-50/50 border border-zinc-200 rounded-2xl sm:rounded-[2rem] outline-none text-base sm:text-xl text-zinc-900 font-bold h-48 sm:h-64 shadow-inner resize-none"
+                    placeholder={learningMethod === 'QUIZ' ? "輸入想測驗的內容，AI 會為你出題..." : "請輸入內容..."} 
+                    value={input} 
+                    onChange={(e) => setInput(e.target.value)}
+                  />
+                )}
                 <div className="flex justify-center gap-3 xs:gap-4 pb-5 sm:pb-0">
                   <Button 
                     onClick={handleLearn} 
@@ -659,17 +720,19 @@ function App() {
                     size={loading ? 'sm' : 'md'} 
                     className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-zinc-200"
                   >
-                    {loading ? 'AI 思考中...' : '開始解析'}
+                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : '開始解析'}
                   </Button>
-                  <Button 
-                    onClick={() => setInput('')} 
-                    disabled={loading || !input} 
-                    variant="secondary"
-                    size={loading ? 'sm' : 'md'} 
-                    className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-rose-100 text-rose-500 hover:text-rose-700 hover:bg-rose-50/50"
-                  >
-                    一鍵刪除
-                  </Button>
+                  {learningMethod !== 'RECOMMEND' && (
+                    <Button 
+                      onClick={() => setInput('')} 
+                      disabled={loading || !input} 
+                      variant="secondary"
+                      size={loading ? 'sm' : 'md'} 
+                      className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-rose-100 text-rose-500 hover:text-rose-700 hover:bg-rose-50/50"
+                    >
+                      一鍵刪除
+                    </Button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -1328,6 +1391,130 @@ function App() {
       <AnimatePresence>
         {mode !== AppMode.FOCUS && (timerState.isActive || timerState.timeLeft < (timerState.mode === 'FOCUS' ? timerState.focusDuration : timerState.breakDuration) * 60) && (
           <MiniTimer state={timerState} onClick={() => setMode(AppMode.FOCUS)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showRecommendModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white w-full max-w-xl rounded-[2rem] border border-zinc-150 shadow-2xl overflow-hidden flex flex-col relative"
+            >
+              <div className="p-6 sm:p-8 bg-zinc-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/10 p-2.5 rounded-xl text-yellow-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.187L15 15l-5.187.904zM18.007 7.007l-.507 2.493-2.493-.507L15 7l.507-2.493 2.493.507L18 7l-.007.007z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black">AI 智慧學習推薦</h3>
+                    <p className="text-xs text-zinc-400 font-bold mt-0.5">自訂你想要 AI 產出的日語內容與等級</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowRecommendModal(false)}
+                  className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 hover:text-white transition"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-6 sm:p-8 space-y-8 text-left max-h-[75vh] overflow-y-auto">
+                {inputMode === 'WORD' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-black text-zinc-900 border-l-4 border-zinc-950 pl-2">
+                        1. 選擇單字系列分類
+                      </label>
+                      <span className="text-xs text-zinc-500 font-bold">當前選擇：{recommendWordCategory}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { key: '日常用語', icon: '💬 日常用語' },
+                        { key: '食物美食', icon: '🍣 食物美食' },
+                        { key: '交通工具', icon: '🚄 交通工具' },
+                        { key: '旅遊生活', icon: '✈️ 旅遊生活' },
+                        { key: '購物娛樂', icon: '🛍️ 購物娛樂' },
+                        { key: '動漫流行', icon: '🎬 動漫流行語' },
+                      ].map((cat) => (
+                        <button
+                          key={cat.key}
+                          type="button"
+                          onClick={() => setRecommendWordCategory(cat.key)}
+                          className={`p-3.5 rounded-xl border text-sm font-bold text-left transition flex items-center gap-2 ${recommendWordCategory === cat.key ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700'}`}
+                        >
+                          <span className="truncate">{cat.icon}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-black text-zinc-900 border-l-4 border-zinc-950 pl-2">
+                      {inputMode === 'WORD' ? '2. 選擇日語合格等級 (JLPT)' : inputMode === 'GRAMMAR' ? '1. 選擇文法合格等級 (JLPT)' : '1. 選擇文章難易度 (JLPT等級)'}
+                    </label>
+                    <span className="text-xs text-zinc-500 font-bold">當前選擇：{selectedLevel}</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {(['N5', 'N4', 'N3', 'N2', 'N1'] as JLPTLevel[]).map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setSelectedLevel(level)}
+                        className={`py-3 rounded-xl border text-base font-black text-center transition ${selectedLevel === level ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700'}`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-zinc-400 font-bold">
+                    {selectedLevel === 'N5' && '💡 N5：基礎日語，適合初學者學習日常基礎單字與基本助詞句型。'}
+                    {selectedLevel === 'N4' && '💡 N4：初級日語，可理解基本生活話題與一般會話語法搭配。'}
+                    {selectedLevel === 'N3' && '💡 N3：中級日語，逐步連接日常與一般報章雜誌的中等難度表達。'}
+                    {selectedLevel === 'N2' && '💡 N2：中高級日語，可順暢讀懂社會、日常周遭甚至中等難度文章。'}
+                    {selectedLevel === 'N1' && '💡 N1：高級日語，適合高階精進、理解深度的各樣論述與書面語。'}
+                  </p>
+                </div>
+
+                {inputMode === 'READING' && (
+                  <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-150 space-y-1.5 text-left">
+                    <div className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
+                      📖 文章主題隨機生成
+                    </div>
+                    <p className="text-xs text-zinc-500 leading-relaxed font-bold">
+                      AI 秘書將會隨機擬定生活、旅遊或文化小故事，並完全依據選定的 <span className="text-zinc-950 underline">{selectedLevel} 難度標準</span> 進行智慧語彙遣詞與段落剪接。
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowRecommendModal(false)}
+                    className="flex-1 py-3 text-sm font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition"
+                  >
+                    關閉
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRecommendModal(false);
+                      handleLearn();
+                    }}
+                    className="flex-1 py-3 text-sm font-bold bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl transition shadow-md flex items-center justify-center gap-2"
+                  >
+                    🚀 確定並開始推薦
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
