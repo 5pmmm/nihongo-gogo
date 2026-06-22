@@ -1201,7 +1201,7 @@ export const analyzeAssistantQuery = async (query: string): Promise<AssistantRes
       4. Set 'detectedType' to 'EXCHANGE_RATE' if they ask about currency conversion, exchange rates, prices in different currencies, etc.
       5. Set 'detectedType' to 'GENERAL_KNOWLEDGE' or 'DAILY_AFFAIRS' for general topics.
       6. Return 2-4 appropriate search citations/references under 'sources' showing where information came from (real-world web domains or helpful URL bookmarks related to the topic).
-      7. Format the textAnswer thoroughly, using Markdown lists or paragraph breaks.
+      7. Format the textAnswer beautifully and compactly. Ensure paragraphs have clean formatting, and **strictly avoid excessive empty lines, redundant consecutive double-nl \\n\\n, or empty spacing tokens like '\\n2. \\n\\n*'**. Keep list numbering tight without empty lines inside lists. Write naturally as a professional narrator.
 
       If 'detectedType' as 'ROUTE', you MUST populate 'routeMap' with an extremely detailed transit schedule including realistic intermediary stations, methods of transit, walking durations, total costs, etc.
     `,

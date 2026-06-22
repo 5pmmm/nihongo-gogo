@@ -166,54 +166,133 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
   // Custom formatted renderer instead of react-markdown for robustness and styling perfection
   const renderMarkdown = (text: string) => {
     if (!text) return null;
-    const lines = text.split('\n');
+
+    const rawLines = text.split('\n');
+    const nodes: React.ReactNode[] = [];
+    
+    let currentListType: 'ul' | 'ol' | null = null;
+    let listItems: string[] = [];
+    let listStartNum: number = 1;
+
+    const flushList = (keyPrefix: string | number) => {
+      if (!currentListType || listItems.length === 0) return;
+      if (currentListType === 'ul') {
+        nodes.push(
+          <ul key={`ul-${keyPrefix}`} className="list-disc pl-5 my-1 text-gray-650 space-y-1">
+            {listItems.map((item, idx) => (
+              <li key={idx} className="leading-relaxed">{parseBold(item)}</li>
+            ))}
+          </ul>
+        );
+      } else if (currentListType === 'ol') {
+        nodes.push(
+          <ol key={`ol-${keyPrefix}`} start={listStartNum} className="list-decimal pl-5 my-1 text-gray-650 space-y-1">
+            {listItems.map((item, idx) => (
+              <li key={idx} className="leading-relaxed">{parseBold(item)}</li>
+            ))}
+          </ol>
+        );
+      }
+      listItems = [];
+      currentListType = null;
+    };
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const trimmed = line.trim();
+
+      // Check if bullet point
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const content = trimmed.substring(2).trim();
+        if (currentListType !== 'ul') {
+          flushList(i);
+          currentListType = 'ul';
+        }
+        if (content) {
+          listItems.push(content);
+        }
+        continue;
+      }
+
+      // Check if numbered point
+      const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+      if (numMatch) {
+        const num = parseInt(numMatch[1], 10);
+        const content = numMatch[2].trim();
+        if (currentListType !== 'ol') {
+          flushList(i);
+          currentListType = 'ol';
+          listStartNum = num;
+        }
+        if (content) {
+          listItems.push(content);
+        }
+        continue;
+      }
+
+      // Not in a list, flush any active list buffer
+      if (currentListType) {
+        flushList(i);
+      }
+
+      // Check headers
+      if (trimmed.startsWith('### ')) {
+        const content = trimmed.substring(4).trim();
+        if (content) {
+          nodes.push(
+            <h4 key={`h4-${i}`} className="text-base font-bold text-indigo-950 mt-4 mb-2 flex items-center gap-1.5 border-l-3 border-indigo-500 pl-2">
+              {content}
+            </h4>
+          );
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('## ')) {
+        const content = trimmed.substring(3).trim();
+        if (content) {
+          nodes.push(
+            <h3 key={`h3-${i}`} className="text-lg font-black text-indigo-900 mt-5 mb-2.5 border-b pb-1.5 border-gray-100 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-indigo-500 shrink-0" />
+              {content}
+            </h3>
+          );
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('# ')) {
+        const content = trimmed.substring(2).trim();
+        if (content) {
+          nodes.push(
+            <h2 key={`h2-${i}`} className="text-xl font-extrabold text-indigo-950 mt-6 mb-3">
+              {content}
+            </h2>
+          );
+        }
+        continue;
+      }
+
+      // Skip empty line spacing entirely to comply with user's demand to avoid unnecessary spacing and \n\n
+      if (trimmed === '') {
+        continue;
+      }
+
+      // Regular paragraph line
+      nodes.push(
+        <p key={`p-${i}`} className="text-gray-650 font-normal leading-relaxed">
+          {parseBold(line)}
+        </p>
+      );
+    }
+
+    if (currentListType) {
+      flushList('end');
+    }
+
     return (
       <div className="space-y-3.5 text-gray-700 leading-relaxed text-sm xs:text-base">
-        {lines.map((line, idx) => {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('### ')) {
-            return (
-              <h4 key={idx} className="text-base font-bold text-indigo-950 mt-4 mb-2 flex items-center gap-1.5 border-l-3 border-indigo-500 pl-2">
-                {trimmed.substring(4)}
-              </h4>
-            );
-          }
-          if (trimmed.startsWith('## ')) {
-            return (
-              <h3 key={idx} className="text-lg font-black text-indigo-900 mt-5 mb-2.5 border-b pb-1.5 border-gray-100 flex items-center gap-2">
-                <BookOpen className="w-4  h-4 text-indigo-500 shrink-0" />
-                {trimmed.substring(3)}
-              </h3>
-            );
-          }
-          if (trimmed.startsWith('# ')) {
-            return (
-              <h2 key={idx} className="text-xl font-extrabold text-indigo-950 mt-6 mb-3">
-                {trimmed.substring(2)}
-              </h2>
-            );
-          }
-          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-            const content = trimmed.substring(2);
-            return (
-              <ul key={idx} className="list-disc pl-5 my-1 text-gray-650 space-y-1">
-                <li>{parseBold(content)}</li>
-              </ul>
-            );
-          }
-          if (/^\d+\.\s/.test(trimmed)) {
-            const content = trimmed.replace(/^\d+\.\s/, '');
-            return (
-              <ol key={idx} className="list-decimal pl-5 my-1 text-gray-650 space-y-1">
-                <li>{parseBold(content)}</li>
-              </ol>
-            );
-          }
-          if (trimmed === '') {
-            return <div key={idx} className="h-1" />;
-          }
-          return <p key={idx} className="text-gray-650 font-normal leading-relaxed">{parseBold(line)}</p>;
-        })}
+        {nodes}
       </div>
     );
   };
