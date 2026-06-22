@@ -738,9 +738,9 @@ function App() {
             </motion.div>
 
             {(currentDefinitions.length > 0 || currentGrammar.length > 0) && (
-              <div className="space-y-10 px-4">
+              <div className="space-y-10 px-2 sm:px-4">
                 <h3 className="text-xl font-black text-zinc-900 border-l-8 border-zinc-900 pl-4 uppercase">解析結果</h3>
-                <div className="grid gap-8 md:grid-cols-2">
+                <div className="grid gap-4 xs:gap-6 md:gap-8 md:grid-cols-2">
                   {currentDefinitions.map((w, i) => (
                     <WordCard 
                       key={i} 

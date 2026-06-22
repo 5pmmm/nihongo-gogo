@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GrammarDefinition } from '../types';
@@ -22,7 +21,7 @@ const parseConnection = (text: string) => {
     const trimmed = token.trim();
     if (trimmed === '+' || trimmed === '/' || trimmed === '或') {
       return (
-        <span key={index} className="text-zinc-400 font-extrabold px-1.5 text-xs sm:text-sm select-none">
+        <span key={index} className="text-zinc-400 font-extrabold px-1 text-xs sm:text-sm select-none">
           {trimmed === '+' ? '＋' : trimmed === '/' ? '／' : ' 或 '}
         </span>
       );
@@ -48,7 +47,7 @@ const parseConnection = (text: string) => {
     return (
       <span 
         key={index} 
-        className={`inline-flex items-center px-3 py-1 rounded-xl text-[11px] sm:text-[13px] border ${bgClass} transition-all shadow-xs`}
+        className={`inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-[13px] border ${bgClass} transition-all shadow-xs`}
       >
         {trimmed}
       </span>
@@ -116,7 +115,7 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
     <div className="relative">
       {/* Grid Placeholder */}
       <div className="pointer-events-none invisible" aria-hidden="true">
-        <div className="bg-white border border-gray-100 rounded-[1.5rem] sm:rounded-[2rem] p-6 sm:p-8 shadow-sm">
+        <div className="bg-white border border-gray-100 rounded-[1.5rem] sm:rounded-[2rem] p-4 xs:p-5 sm:p-8 shadow-sm">
            <div className="h-40 sm:h-48"></div>
         </div>
       </div>
@@ -138,7 +137,7 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6 pointer-events-none">
             <motion.div
               layoutId={layoutId}
-              className="pointer-events-auto bg-white border border-gray-100 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-lg p-6 sm:p-10 cursor-default max-h-[85vh] overflow-y-auto no-scrollbar ring-1 ring-black/5 relative"
+              className="pointer-events-auto bg-white border border-gray-100 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-lg p-5 sm:p-10 cursor-default max-h-[85vh] overflow-y-auto no-scrollbar ring-1 ring-black/5 relative"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ 
@@ -158,29 +157,28 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
                 </svg>
               </button>
 
-              <motion.div className="mb-5 sm:mb-6" layout="position">
-                <motion.div layout="position" className="flex items-center space-x-2 mb-2.5">
+              <motion.div className="mb-4 sm:mb-6" layout="position">
+                <motion.div layout="position" className="flex items-center space-x-2 mb-2">
                    <span className="bg-indigo-900 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest shadow-sm">Grammar</span>
                 </motion.div>
                 
-                {/* 標題大小調整稍微小一點點 (from text-2xl/3xl to text-xl/2xl with fluid dynamic weights) */}
-                <motion.h3 layout="position" className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight mb-1 leading-snug">
+                <motion.h3 layout="position" className="text-lg xs:text-xl sm:text-2xl font-black text-gray-900 tracking-tight mb-1 leading-snug">
                   {data.grammarPoint}
                 </motion.h3>
               </motion.div>
 
               {/* 句型組成另外以方塊展示，並附上不同詞性的色彩樣式 */}
-              <motion.div layout="position" className="bg-indigo-50/20 border border-indigo-100/50 rounded-2xl p-5 mb-6 shadow-sm overflow-hidden relative">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse inline-block" />
-                    <span className="text-xs sm:text-sm font-black text-indigo-950 uppercase tracking-wider select-none">
+              <motion.div layout="position" className="bg-indigo-50/20 border border-indigo-100/50 rounded-2xl p-4 sm:p-5 mb-5 sm:mb-6 shadow-sm overflow-hidden relative">
+                <div className="flex items-center justify-between gap-2 mb-2.5 sm:mb-3">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-indigo-600 rounded-full animate-pulse inline-block" />
+                    <span className="text-[11px] sm:text-sm font-black text-indigo-950 uppercase tracking-wider select-none">
                       接續結構組成 (句型公式)
                     </span>
                   </div>
-                  <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100/50 px-1.5 py-0.5 rounded-md">Structure</span>
+                  <span className="text-[8px] sm:text-[9px] font-black text-indigo-500 bg-indigo-50 border border-indigo-100/50 px-1.5 py-0.5 rounded-md">Structure</span>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center bg-white border border-indigo-100/25 p-3.5 sm:p-4 rounded-xl shadow-xs">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center bg-white border border-indigo-100/25 p-3 sm:p-4 rounded-xl shadow-xs">
                   {parseConnection(data.connection)}
                 </div>
               </motion.div>
@@ -190,46 +188,46 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
                 className="border-t border-gray-50 pt-5 space-y-6"
               >
                 {/* 用法解析、中文意思與詳細解釋 */}
-                <div className="space-y-3.5">
+                <div className="space-y-3">
                   <div>
-                    <h4 className="text-[9px] sm:text-[10px] font-bold text-zinc-300 uppercase tracking-widest mb-1.5">用法中文意思</h4>
-                    <motion.p layout="position" className="text-lg sm:text-xl text-gray-900 font-extrabold tracking-tight leading-snug">
+                    <h4 className="text-[8px] sm:text-[10px] font-bold text-zinc-300 uppercase tracking-widest mb-1.5">用法中文意思</h4>
+                    <motion.p layout="position" className="text-base sm:text-lg md:text-xl text-gray-900 font-extrabold tracking-tight leading-snug">
                       {data.meaning}
                     </motion.p>
                   </div>
 
                   <div>
-                     <h4 className="text-[9px] sm:text-[10px] font-bold text-zinc-300 uppercase tracking-widest mb-1.5">用法解析說明</h4>
-                     <motion.p layout="position" className="text-zinc-600 font-medium text-xs sm:text-sm leading-relaxed whitespace-pre-line">
+                     <h4 className="text-[8px] sm:text-[10px] font-bold text-zinc-300 uppercase tracking-widest mb-1.5">用法解析說明</h4>
+                     <motion.p layout="position" className="text-zinc-650 font-medium text-[11px] sm:text-sm leading-relaxed whitespace-pre-line">
                         {data.explanation}
                      </motion.p>
                   </div>
                 </div>
                 
                 {/* 情境例句 & 動態單字文法點塗色與標示 */}
-                <div className="space-y-4 pt-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-[10px] font-black text-zinc-300 uppercase tracking-widest">情境應用例句</h4>
+                <div className="space-y-3.5 sm:space-y-4 pt-1">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <h4 className="text-[9px] sm:text-[10px] font-black text-zinc-300 uppercase tracking-widest">情境應用例句</h4>
                       <div className="h-px flex-1 bg-zinc-50" />
                     </div>
                     {data.examples.map((ex, i) => (
                         <motion.div 
                             layout="position" 
                             key={i} 
-                            className="bg-zinc-50/30 rounded-2xl border border-zinc-100 hover:border-zinc-200/50 transition-all shadow-xs p-4 sm:p-5"
+                            className="bg-zinc-50/30 rounded-2xl border border-zinc-100 hover:border-zinc-200/50 transition-all shadow-xs p-3.5 sm:p-5"
                         >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100/30 px-1.5 py-0.5 rounded-md">例句 0{i+1}</span>
-                              <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">Context</span>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[8px] sm:text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100/30 px-1.5 py-0.5 rounded-md">例句 0{i+1}</span>
+                              <span className="text-[8px] sm:text-[9px] font-bold text-zinc-300 uppercase tracking-widest">Context</span>
                             </div>
 
-                            <motion.p layout="position" className="text-zinc-900 font-extrabold text-base sm:text-[1.05rem] leading-relaxed">
+                            <motion.p layout="position" className="text-zinc-900 font-extrabold text-[15px] sm:text-[1.05rem] leading-relaxed">
                                 {highlightGrammarInSentence(ex.sentence, data.grammarPoint)}
                             </motion.p>
-                            <motion.p layout="position" className="text-zinc-400 font-semibold text-xs my-1 font-mono tracking-wide">
+                            <motion.p layout="position" className="text-zinc-400 font-semibold text-[10px] sm:text-xs my-0.5 font-mono tracking-wide">
                                 {ex.reading}
                             </motion.p>
-                            <motion.p layout="position" className="text-zinc-650 font-medium text-xs sm:text-sm border-l-2 border-indigo-200/65 pl-3 mt-2 leading-relaxed">
+                            <motion.p layout="position" className="text-zinc-600 font-medium text-xs sm:text-sm border-l-2 border-indigo-200/65 pl-3 mt-1.5 leading-relaxed">
                                 {ex.translation}
                             </motion.p>
                         </motion.div>
@@ -242,47 +240,47 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
           <motion.div
             layoutId={layoutId}
             onClick={onClick}
-            className="absolute inset-0 bg-white border border-gray-100 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 hover:shadow-xl hover:border-gray-200 cursor-pointer shadow-sm overflow-hidden"
+            className="absolute inset-0 bg-white border border-gray-100 rounded-[1.5rem] sm:rounded-[2rem] p-4.5 xs:p-5 sm:p-8 hover:shadow-xl hover:border-gray-200 cursor-pointer shadow-sm overflow-hidden flex flex-col justify-between"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <motion.div className="mb-4 sm:mb-6" layout="position">
-              <motion.div layout="position" className="flex items-center space-x-2 mb-2.5">
-                 <span className="bg-indigo-900 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest shadow-lg">Grammar</span>
+            <motion.div className="mb-2 sm:mb-4 flex flex-col" layout="position">
+              <motion.div layout="position" className="flex items-center space-x-2 mb-1.5 sm:mb-2.5">
+                 <span className="bg-indigo-900 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest shadow-sm">Grammar</span>
               </motion.div>
               
-              <motion.h3 layout="position" className="text-base sm:text-lg font-black text-gray-900 tracking-tight mb-1">
+              <motion.h3 layout="position" className="text-base sm:text-lg font-black text-gray-900 tracking-tight mb-1 truncate">
                 {data.grammarPoint}
               </motion.h3>
 
-              <div className="flex flex-wrap gap-1 items-center mt-2">
+              <div className="flex flex-wrap gap-1 items-center mt-1 sm:mt-2">
                 {parseConnection(data.connection)}
               </div>
             </motion.div>
             
             <motion.div 
               layout="position" 
-              className="border-t border-gray-50 pt-3 sm:pt-4"
+              className="border-t border-gray-50 pt-2.5 sm:pt-4"
             >
-              <motion.p layout="position" className="text-sm sm:text-base mb-2 text-gray-800 font-bold tracking-tight">
+              <motion.p layout="position" className="text-xs sm:text-base mb-1.5 sm:mb-2 text-gray-800 font-bold tracking-tight line-clamp-1">
                 {data.meaning}
               </motion.p>
 
-              <motion.p layout="position" className="text-[10px] sm:text-xs mb-3 text-gray-500 font-medium line-clamp-2">
+              <motion.p layout="position" className="text-[9px] sm:text-xs mb-2 sm:mb-3 text-gray-500 font-medium line-clamp-2">
                   {data.explanation}
               </motion.p>
               
-              <div className="space-y-2">
+              <div className="space-y-1.5 sm:space-y-2">
                   {data.examples.slice(0, 1).map((ex, i) => (
                       <motion.div 
                           layout="position" 
                           key={i} 
-                          className="bg-zinc-50/50 rounded-xl border border-zinc-100 shadow-sm p-2 sm:p-3"
+                          className="bg-zinc-50/50 rounded-xl border border-zinc-100 shadow-sm p-1.5 sm:p-3"
                       >
-                          <motion.p layout="position" className="text-gray-900 font-bold text-xs sm:text-sm">
+                          <motion.p layout="position" className="text-gray-900 font-bold text-[10px] sm:text-sm truncate">
                               {ex.sentence}
                           </motion.p>
-                          <motion.p layout="position" className="text-gray-500 font-medium text-[10px] sm:text-xs border-l border-indigo-100 pl-3 mt-1">
+                          <motion.p layout="position" className="text-gray-500 font-medium text-[9px] sm:text-xs border-l border-indigo-100 pl-2 mt-0.5 truncate">
                               {ex.translation}
                           </motion.p>
                       </motion.div>
