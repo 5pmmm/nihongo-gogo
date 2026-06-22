@@ -30,6 +30,7 @@ import {
 import { Button } from './Button';
 import { Loader } from './Loader';
 import { analyzeAssistantQuery, AssistantResponse, RouteMapData, CurrencyData, RecipeData, TransitStep } from '../services/geminiService';
+import { saveAssistantQuery, fetchAssistantQueries } from '../services/firebaseService';
 
 interface AIAssistantProps {
   onBack: () => void;
@@ -75,12 +76,75 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
   const [response, setResponse] = useState<AssistantResponse | null>(null);
   const [historyList, setHistoryList] = useState<{ query: string; response: AssistantResponse; timestamp: number }[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [syncKey, setSyncKey] = useState('');
+  const [editingSyncKey, setEditingSyncKey] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
   
   // Custom interactive state for Recipe Ingredients checklist
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
   
   // Custom interactive state for Currency Realtime Calculator
   const [calcAmount, setCalcAmount] = useState<number>(100);
+
+  // Initialize and load syncKey
+  useEffect(() => {
+    let savedSyncKey = localStorage.getItem('mk-nihongo-sync-key');
+    if (!savedSyncKey) {
+      // Create a nice human-readable random code
+      savedSyncKey = `user_${Math.random().toString(36).substring(2, 10)}`;
+      localStorage.setItem('mk-nihongo-sync-key', savedSyncKey);
+    }
+    setSyncKey(savedSyncKey);
+    setEditingSyncKey(savedSyncKey);
+  }, []);
+
+  const loadHistoryFromFirestore = async (key: string) => {
+    if (!key) return;
+    setHistoryLoading(true);
+    try {
+      const records = await fetchAssistantQueries(key, 50); // support up to 50 items
+      const formattedHistory = records.map(item => {
+        let parsedResponse: AssistantResponse;
+        try {
+          parsedResponse = JSON.parse(item.responseJson);
+        } catch (e) {
+          parsedResponse = {
+            detectedType: 'GENERAL_KNOWLEDGE',
+            textAnswer: item.responseJson,
+            sources: []
+          };
+        }
+        return {
+          query: item.query,
+          response: parsedResponse,
+          timestamp: item.timestamp
+        };
+      });
+      setHistoryList(formattedHistory);
+    } catch (e) {
+      console.error('Error fetching layout queries:', e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (syncKey) {
+      loadHistoryFromFirestore(syncKey);
+    }
+  }, [syncKey]);
+
+  const handleUpdateSyncKey = async () => {
+    if (!editingSyncKey.trim()) {
+      alert('請輸入有效的同步帳號名稱！');
+      return;
+    }
+    const cleanKey = editingSyncKey.trim().toLowerCase();
+    setSyncKey(cleanKey);
+    localStorage.setItem('mk-nihongo-sync-key', cleanKey);
+    await loadHistoryFromFirestore(cleanKey);
+    alert(`同步帳號已切換至「${cleanKey}」，已成功同步最新歷史解答紀錄！`);
+  };
 
   // Auto scroll to response when loaded
   useEffect(() => {
@@ -105,13 +169,18 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
       const data = await analyzeAssistantQuery(textToSearch);
       setResponse(data);
       
-      // Save to local in-memory history list
+      // Save local in-memory history list
       setHistoryList(prev => [
         { query: textToSearch, response: data, timestamp: Date.now() },
         ...prev.filter(item => item.query !== textToSearch) // Deduplicate
       ]);
 
-      // Fire XP reward callback! Giving user a nice 20XP bonus for interacting with their AI teacher
+      // Save to Firebase Firestore under the active syncKey for infinite durability and cross-device sync!
+      if (syncKey) {
+        await saveAssistantQuery(syncKey, textToSearch, data);
+      }
+
+      // Fire XP reward callback! Giving user a nice 30XP bonus for interacting with their AI teacher
       if (onXpUpdate) {
         onXpUpdate(30); 
       }
@@ -311,63 +380,119 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
     <div className="min-h-screen bg-slate-50/50">
       <main className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-6">
         
-        {/* Minimalist History Header Row */}
-        {historyList.length > 0 && (
-          <div className="flex justify-between items-center bg-gray-50/50 p-2 rounded-2xl border border-gray-100 mb-2">
-            <span className="text-xs font-bold text-gray-500 pl-2">
-              歷史解答紀錄 ({historyList.length})
-            </span>
-            <button 
-              onClick={() => setShowHistory(!showHistory)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                showHistory ? 'bg-indigo-50 text-indigo-700' : 'bg-white hover:bg-gray-100 text-gray-600 shadow-xs border border-gray-150'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>{showHistory ? '隱藏紀錄' : '查看紀錄'}</span>
-            </button>
+        {/* Cloud Sync & History Control Panel */}
+        <div className="bg-white border border-gray-150/80 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Globe className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
+                  雲端同步與帳號紀錄
+                  <span className="bg-emerald-50 text-emerald-700 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-emerald-200">
+                    不限裝置
+                  </span>
+                </h4>
+                <p className="text-[11px] sm:text-xs text-gray-400 font-medium leading-normal">
+                  使用專屬同步帳號，長效保存您的提問紀錄，不怕遺失且多個裝置皆可讀取。
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button 
+                onClick={() => setShowHistory(!showHistory)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer border ${
+                  showHistory 
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' 
+                    : 'bg-indigo-50/50 border-indigo-150 text-indigo-700 hover:bg-indigo-50'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>提問紀錄 ({historyList.length})</span>
+              </button>
+            </div>
           </div>
-        )}
+
+          <div className="pt-3 border-t border-gray-100 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+            <div className="flex flex-col xs:flex-row items-baseline xs:items-center gap-2 w-full md:w-auto">
+              <span className="text-xs font-black text-gray-500 shrink-0">本機同步帳號 (Sync ID)：</span>
+              <div className="flex items-center gap-1.5 w-full xs:w-auto">
+                <input 
+                  type="text" 
+                  value={editingSyncKey}
+                  onChange={(e) => setEditingSyncKey(e.target.value)}
+                  placeholder="輸入自訂 Email 或英文數字編號"
+                  className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 focus:bg-white border border-gray-150 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg text-xs font-bold text-gray-700 flex-1 xs:w-64 focus:outline-none transition-all placeholder:text-gray-400 placeholder:font-normal"
+                />
+                <button
+                  onClick={handleUpdateSyncKey}
+                  disabled={historyLoading}
+                  className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100/80 active:bg-indigo-200/50 text-indigo-700 text-xs font-black rounded-lg transition-all shadow-xs border border-indigo-150 shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  {historyLoading ? '同步中...' : '匯入/切換'}
+                </button>
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-gray-400 font-medium leading-normal">
+              💡 提示：在其它手機或平板輸入<strong>相同帳號</strong>即可跨裝置存取您的完整提問歷史。
+            </p>
+          </div>
+        </div>
 
         {/* Toggleable history drawer */}
         <AnimatePresence>
-          {showHistory && historyList.length > 0 && (
+          {showHistory && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="bg-white border-2 border-indigo-100/55 rounded-2xl p-4 overflow-hidden shadow-inner"
+              className="bg-white border border-indigo-100 rounded-2xl p-4 overflow-hidden shadow-xs space-y-3"
             >
-              <h3 className="text-xs font-black text-indigo-900 mb-3 uppercase tracking-wider flex items-center gap-1">
-                <History className="w-3.5 h-3.5" /> 本次對話解答紀錄
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto no-scrollbar">
-                {historyList.map((item, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setResponse(item.response);
-                      setQuery(item.query);
-                      setShowHistory(false);
-                    }}
-                    className="p-3 rounded-xl border border-gray-100 hover:border-indigo-200 bg-gray-50/50 hover:bg-white text-left transition-all flex items-start gap-2.5 group cursor-pointer w-full"
-                  >
-                    <span className="p-1 rounded bg-indigo-50 text-indigo-600 text-[10px] sm:text-xs shrink-0 font-bold group-hover:scale-105 transition-transform mt-0.5">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0 flex flex-col">
-                      <span className="text-[10px] sm:text-xs font-semibold text-gray-400 flex items-center gap-1 mb-0.5 select-none">
-                        <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
-                        {`${String(new Date(item.timestamp).getMonth() + 1).padStart(2, '0')}/${String(new Date(item.timestamp).getDate()).padStart(2, '0')} ${String(new Date(item.timestamp).getHours()).padStart(2, '0')}:${String(new Date(item.timestamp).getMinutes()).padStart(2, '0')}`}
-                      </span>
-                      <span className="text-xs sm:text-sm font-bold text-gray-800 truncate block group-hover:text-indigo-900 transition-colors leading-relaxed">
-                        {item.query}
-                      </span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0 self-center" />
-                  </button>
-                ))}
+              <div className="flex justify-between items-center pb-2 border-b border-gray-50">
+                <h3 className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5" /> 雲端備份提問履歷 ({syncKey})
+                </h3>
+                {historyLoading && (
+                  <span className="text-[10px] text-indigo-500 font-bold animate-pulse">庫存最新紀錄讀取中...</span>
+                )}
               </div>
+              
+              {historyList.length === 0 ? (
+                <div className="text-center py-6 text-xs font-bold text-gray-400">
+                  當前同步帳號下無提問歷史紀錄。立即在下方提問，將會自動備份儲存！
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto no-scrollbar">
+                  {historyList.map((item, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setResponse(item.response);
+                        setQuery(item.query);
+                        setShowHistory(false);
+                      }}
+                      className="p-3 rounded-xl border border-gray-100 hover:border-indigo-200 bg-gray-50/50 hover:bg-white text-left transition-all flex items-start gap-2.5 group cursor-pointer w-full"
+                    >
+                      <span className="p-1 rounded bg-indigo-50 text-indigo-600 text-[10px] sm:text-xs shrink-0 font-bold group-hover:scale-105 transition-transform mt-0.5">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-1 mb-0.5 select-none">
+                          <Clock className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
+                          {`${String(new Date(item.timestamp).getMonth() + 1).padStart(2, '0')}/${String(new Date(item.timestamp).getDate()).padStart(2, '0')} ${String(new Date(item.timestamp).getHours()).padStart(2, '0')}:${String(new Date(item.timestamp).getMinutes()).padStart(2, '0')}`}
+                        </span>
+                        <span className="text-xs sm:text-sm font-bold text-gray-800 truncate block group-hover:text-indigo-900 transition-colors leading-relaxed">
+                          {item.query}
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors shrink-0 self-center" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
