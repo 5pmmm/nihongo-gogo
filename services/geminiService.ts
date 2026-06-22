@@ -1208,7 +1208,6 @@ export const analyzeAssistantQuery = async (query: string): Promise<AssistantRes
     config: {
       responseMimeType: "application/json",
       responseSchema: assistantSchema,
-      tools: [{ googleSearch: {} }]
     }
   });
 
