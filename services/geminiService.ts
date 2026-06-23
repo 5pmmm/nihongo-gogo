@@ -729,23 +729,46 @@ export const generateQuizFromContent = async (words: WordDefinition[], grammar: 
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
-      Based on this content: ${context}
+      Based on the following content context: ${context}
       
-      Generate a 10-question mixed Japanese quiz.
+      Your goal is to generate a highly professional, diverse, and engaging 10-question Japanese quiz that covers a balanced range of Japanese lexical, syntactic, and semantic skills.
       
-      MANDATORY MIX:
-      1. 3 Fill-in-the-blank questions (___) about particles or conjugation.
-      2. 2 Sentence ordering questions (e.g. Arrange A, B, C, D to form a sentence).
-      3. 2 Reading comprehension questions based on a context snippet.
-      4. 3 Vocabulary/Kanji usage questions.
+      MANDATORY 10-QUESTION DIVERSITY & TYPE MIX:
+      1. [3 Questions] **VOCABULARY & KANJI (單字及其用法、讀音與漢字寫法)**:
+         - 1 Kanji Reading question: Provide a sentence with a target Kanji in brackets (e.g. 「図書館」) and ask for the correct hiragana reading.
+         - 1 Kanji Writing question: Provide a sentence with a target Hiragana word in brackets (e.g. いっしょに「あそび」ましょう) and ask for the correct kanji spelling.
+         - 1 Word Usage question: Choose the correct vocabulary (noun, verb, adjective, or adverb) that fits the sentence context semantically and grammatically.
+         
+      2. [3 Questions] **GRAMMAR, CONJUGATION & PARTICLES (文法、助詞與接續填空)**:
+         - Test grammar points (e.g., ～ている, ～ほうがいい, ～なければならない) or particles (は, が, を, に, で, と, も, から, まで) in clear blanks "___".
+         - Make sure the question prompts ask clearly for the correct particle/conjugation that makes the sentence grammatically complete and natural.
+         
+      3. [2 Questions] **SENTENCE ORDERING & ARRANGEMENT (句子重組與拼湊順序題 - 並び替え)**:
+         - To avoid ANY ambiguity or confusion, follow this strict formatting structure:
+           - The 'question' MUST specify a template sentence with four numbered underlines like this: "昨日は ①＿ ②＿ ③★＿ ④＿ でした。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
+           - Below that template, list the 4 unordered word/phrase segments clearly using brackets (e.g. "【重組單字區：1. 友達と / 2. 楽しく / 3. 賑やかな / 4. 食事】").
+           - Below that list, write the clear instruction: "請重組句子，並選出 ★ (第三個空格) 處正確的重組單字：".
+           - To make selection absolutely seamless and clear, each of the 4 elements in 'options' should represent THE ENTIRE ORDER combination showing BOTH the number sequence and the FULL resulting sentence. This prevents any confusion whatsoever about word slots and whatcompleted sentence looks like.
+             Example Options:
+             - "1 → 4 → 3 → 2 (友達と 食事 賑やかな 楽しく)"
+             - "1 → 2 → 4 → 3 (友達と 楽しく 食事 賑やかな)"
+             - "2 → 1 → 3 → 4 (楽しく 友達と 賑やかな 食事)"
+             - "4 → 1 → 3 → 2 (食事 友達と 賑やかな 楽しく)"
+         
+      4. [1 Question] **TRANSLATION MATCHING (翻譯與意思比對)**:
+         - Provide a rich Japanese sentence and ask for the most natural, accurate Traditional Chinese translation matching the usage, or vice versa (given a Chinese meaning/scenario, choose the correct Japanese translation).
+         
+      5. [1 Question] **READING COMPREHENSION (短文/對話情境閱讀理解題)**:
+         - Provide a short 2-3 sentence Japanese dialogue, memo, email, or daily scenario paragraph in the 'context' property.
+         - In 'question', ask a comprehension question in Traditional Chinese (e.g. "關於這段話，下列敘述何者正確？", "主角今天打算要做什麼？", or "這封電子郵件的目的是什麼？").
+         
+      CRITICAL LANGUAGE & METADATA GUIDELINES:
+      - Use ONLY Traditional Chinese (zh-TW, 台灣繁體中文) for all explanations, instructions, options, and translations.
+      - 'questionReading': ALWAYS provide the full furigana/phonetic reading guide in Hiragana/Katakana for the complete 'question' text.
+      - 'questionTranslation': Provide a complete, beautiful, and natural Traditional Chinese translation of the whole 'question' text.
+      - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit of why they are incorrect.
       
-      CRITICAL: For EVERY question, provide:
-      - 'questionReading': The full phonetic reading (Hiragana/Katakana) for the question text.
-      - 'questionTranslation': A natural Traditional Chinese translation for the question text.
-      
-      Difficulty: Match the input content.
-      Language: Traditional Chinese (Taiwan).
-      Target: 10 total questions.
+      Match the difficulty of the questions to the level of the provided content or inputs. Return exactly 10 questions.
     `,
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
@@ -857,7 +880,7 @@ const travelTranslationSchema = {
         required: ["original", "kana", "romaji", "translationZh", "translationEn"]
       }
     },
-    travelTips: { type: Type.STRING, description: "Useful travel tips, cultural context, allergens, dietary notes, or purchasing advice in Traditional Chinese" }
+    travelTips: { type: Type.STRING, description: "Highly comprehensive, helpful reminders, usage notices, allergen safety cautions (過敏原提示如蛋、奶、小麥、花生等), caffeine warnings, tax refund details, and preparation guidelines written in comforting Traditional Chinese, structured cleanly with bullets" }
   },
   required: ["title", "translatedTextZh", "translatedTextEn", "detectedItems", "travelTips"]
 };
@@ -875,20 +898,25 @@ export const translateTravelPhoto = async (
   const base64Data = match[2];
 
   const scanTypeLabels = {
-    MENU: "菜單 (Menu/Food Item/Price list)",
-    LABEL: "商品標籤/包裝/藥妝說明書 (Product Label/Package/Instructions)",
-    SIGN: "指路路標/看板文字/公告 (Signboard/Map/Bulletin Board)",
-    GENERAL: "一般拍照直譯 (General Japanese Sign)"
+    MENU: "菜單 (Menu / Food Items / Soft drinks lists)",
+    LABEL: "商品標籤 / 包裝細節 / 藥妝說明 / 成分成分表與警語 (Product Package / Ingredients Sheet / Drug & Cosmetics Label)",
+    SIGN: "路標 / 指路牌 / 警告告示 / 指示牌 (Signboard / Public Notice / Danger Signs)",
+    GENERAL: "整合性拍照直譯 (Universal Sight Scan)"
   };
 
-  const prompt = `You are a real-time Japanese tourist helper and translator in Japan.
-The user has uploaded a photo of a ${scanTypeLabels[scanType]} and wants immediate and intuitive help.
+  const prompt = `You are an elite, real-time Japanese travel scanner and translator assisting tourists in Japan.
+The user has uploaded a photo of a ${scanTypeLabels[scanType]} and requires an extremely comprehensive, clear, and detailed analysis.
 
-Analyze the image or photo carefully:
-1. Detect and extract all written Japanese keys, words, dish names, prices, or labels.
-2. Formulate a structured, easy-to-read translation including pronunciation (kana and romaji) so the user can easily repeat/display it to Japanese servers, clerks, or locals.
-3. Identify allergens (like pork, nuts, eggs, dairy), caffeine, and side instructions if applicable.
-4. Give a warm, helpful summary in Traditional Chinese and English, and provide practical travel nuggets (such as: how to order this, is there a tax-free label, is it spicy).`;
+CRITICAL DIRECTIVES:
+1. DEEP & THOROUGH SCANNING: You MUST scan and extract everything visible. Do not focus only on large main headings. Carefully parse small prints, tiny background texts, ingredients lists, nutrition tables, manufacturer guidelines, additives labels, allergen warnings (such as 蛋/egg, 乳/milk, 小麥/wheat, 蕎麥/buckwheat, 花生/peanut, 蝦/shrimp, 蟹/crab, 肉類/meat etc.), spicy labels, side effects, or warning statements.
+2. DETAILED ITEM BREAKDOWN: In the "detectedItems" array, list these items from largest/most prominent to the smallest prints or minor details. For each item:
+   - Provide the exact Japanese text as written ("original").
+   - Provide the phonetic guide ("kana" and "romaji") so a tourist can pronounce it.
+   - Provide a natural and accurate Traditional Chinese translation ("translationZh").
+   - Use the "description" field to fully detail what this item represents, its ingredients, allergen warnings, or volume/quantity markings, making sure to highlight any risk factors.
+3. EXTRACT WARN reminder (貼心提醒):
+   - Compile all dietary rules, caffeine presence, alcohol presence, pediatric warnings, critical warnings, tax-free tips, usage instructions, or spicy/allergen notations comprehensively under the "travelTips" field in Traditional Chinese.
+   - Organize "travelTips" clearly with warm, empathetic markdown list bullet points so they are visually appealing and easily understandable to read.`;
 
   const imagePart = {
     inlineData: {
@@ -987,7 +1015,7 @@ const diaryAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
     title: { type: Type.STRING, description: "Suggest a suitable, poetic, or descriptive title in Japanese for this diary entry. (Optional: provide Traditional Chinese translation alongside, e.g., 「雨の日（雨天）」)" },
-    correctedFullText: { type: Type.STRING, description: "The fully polished and corrected Japanese diary passage. Compare with original, fixing typos silently or grammar errors." },
+    correctedFullText: { type: Type.STRING, description: "The fully polished and corrected Japanese diary passage. CRITICAL: You MUST strictly match and preserve the user's custom line breaks (\\n) and paragraph layout. If the user has sentences separated to different lines, make sure the corrected equivalents are placed on equivalent line breaks so both side-by-side versions match up perfectly." },
     overallFeedback: { type: Type.STRING, description: "Warm, professional feedback in Traditional Chinese on their writing style, vocabulary, and grammar" },
     jlptEstimatedLevel: { type: Type.STRING, description: "Estimated JLPT level of this text (e.g., N5, N4, N3)" },
     corrections: {
@@ -1050,9 +1078,10 @@ export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalys
       Tasks:
       1. Correct all spelling, grammar, particles, and vocabulary errors based on the N4/N5 level.
       2. Polish the sentences to make them sound like natural, idiomatic but simple and accessible Japanese (using N4/N5 friendly, polite or casual diary style, such as using -desu/-masu consistently unless they wrote casual).
-      3. Provide detailed sentence-by-sentence corrections and explanations in Traditional Chinese (Taiwan) ONLY for sentences with actual major errors.
-      4. Extract 3-5 suitable beginner/intermediate (N4/N5, at most N3) vocabulary words or grammar points from their diary with readings and Traditional Chinese meanings.
-      5. Provide an overall encouragement score/grade/feedback in Traditional Chinese, acknowledging their current level.
+      3. CRITICAL LAYOUT MATCHING: The correctedFullText MUST preserve the exact paragraph breaks, vertical whitespace, and manual line-break structure (\n) of the original student submission. If the original text is formatted sentence-by-sentence, or has custom paragraph spacings/bullet structures, the corrected version MUST correspond line-for-line to match that layout perfectly. Avoid merging independent lines into flat block paragraphs.
+      4. Provide detailed sentence-by-sentence corrections and explanations in Traditional Chinese (Taiwan) ONLY for sentences with actual major errors.
+      5. Extract 3-5 suitable beginner/intermediate (N4/N5, at most N3) vocabulary words or grammar points from their diary with readings and Traditional Chinese meanings.
+      6. Provide an overall encouragement score/grade/feedback in Traditional Chinese, acknowledging their current level.
      `,
     config: {
       responseMimeType: "application/json",

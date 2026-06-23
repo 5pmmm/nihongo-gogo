@@ -19,6 +19,7 @@ import {
   Tag,
   AlertTriangle,
   Lightbulb,
+  History,
   Menu as MenuIcon
 } from 'lucide-react';
 import { ChatMessage } from '../types';
@@ -116,6 +117,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack, onXpUpdate
   const [scanType, setScanType] = useState<ScanType>('MENU');
   const [scanImage, setScanImage] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<any | null>(null);
+  const [travelLogs, setTravelLogs] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('mk-nihongo-travel-logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Failed to load travel logs from localStorage', e);
+      return [];
+    }
+  });
+
+  // Save travel logs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('mk-nihongo-travel-logs', JSON.stringify(travelLogs));
+  }, [travelLogs]);
+
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | ScanType>('ALL');
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const scanResultRef = useRef<HTMLDivElement>(null);
@@ -401,6 +418,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack, onXpUpdate
       try {
         const result = await translateTravelPhoto(base64String, scanType);
         setScanResult(result);
+        
+        // Save scan log to history list
+        const newLog = {
+          id: `travel-${Date.now()}`,
+          timestamp: Date.now(),
+          scanType,
+          image: base64String,
+          result
+        };
+        setTravelLogs(prev => [newLog, ...prev]);
+
         onXpUpdate(25); // Large XP rewards for practicing real-life photo translation!
       } catch (err) {
         console.error(err);
@@ -1105,6 +1133,166 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack, onXpUpdate
                </div>
             )}
 
+            {/* Travel Scan History Logs Panel */}
+            {!scanImage && !isLoading && travelLogs.length > 0 && (
+              <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 shadow-3xs space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-zinc-100 font-sans">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-amber-50 border border-amber-100 rounded-xl text-amber-600 shrink-0">
+                      <History size={16} className="stroke-[2.2]" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-zinc-900 flex items-center gap-1.5">
+                        歷史辨識與翻譯紀錄 (History)
+                      </h4>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      if (confirm('確定要清空所有旅遊拍譯之歷史紀錄嗎？')) {
+                        setTravelLogs([]);
+                      }
+                    }}
+                    className="text-[10px] sm:text-xs font-black text-rose-500 bg-rose-50 hover:bg-rose-100 border border-rose-100 px-2.5 py-1 rounded-xl transition-all select-none cursor-pointer"
+                  >
+                    全部清空
+                  </button>
+                </div>
+
+                {/* Filter list for different categories */}
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 pb-1">
+                  {[
+                    { id: 'ALL', text: '全部顯示' },
+                    { id: 'MENU', text: '菜單' },
+                    { id: 'LABEL', text: '商品標籤' },
+                    { id: 'SIGN', text: '路標指路' },
+                    { id: 'GENERAL', text: '拍照直譯' }
+                  ].map(filterBtn => (
+                    <button
+                      key={filterBtn.id}
+                      onClick={() => setHistoryFilter(filterBtn.id as any)}
+                      className={`px-3 py-1.5 text-[10px] sm:text-xs font-extrabold rounded-lg border transition-all shrink-0 cursor-pointer ${
+                        historyFilter === filterBtn.id
+                          ? 'bg-amber-500 border-amber-500 text-white font-black shadow-sm'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700'
+                      }`}
+                    >
+                      {filterBtn.text}
+                      {filterBtn.id === 'ALL' ? (
+                        <span className="ml-1 px-1.5 py-0.5 bg-white/20 text-white rounded-md text-[9px]">
+                          {travelLogs.length}
+                        </span>
+                      ) : (
+                        <span className="ml-1 px-1.5 py-0.5 bg-zinc-200 text-zinc-650 rounded-md text-[9px] font-sans">
+                          {travelLogs.filter(log => log.scanType === filterBtn.id).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Grid for past records list */}
+                {(() => {
+                  const filteredLogs = historyFilter === 'ALL' 
+                    ? travelLogs 
+                    : travelLogs.filter(log => log.scanType === historyFilter);
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-xs text-zinc-400 font-extrabold">
+                        尚無此類型的翻譯歷史紀錄
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+                      {filteredLogs.map((log: any) => {
+                        const scanTypeLabels: Record<string, string> = {
+                          MENU: '菜單',
+                          LABEL: '標籤',
+                          SIGN: '路標',
+                          GENERAL: '直譯'
+                        };
+
+                        const badgeColors: Record<string, string> = {
+                          MENU: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+                          LABEL: 'bg-sky-50 text-sky-700 border-sky-100',
+                          SIGN: 'bg-purple-50 text-purple-700 border-purple-100',
+                          GENERAL: 'bg-amber-50 text-amber-700 border-amber-100'
+                        };
+
+                        const formattedDate = new Date(log.timestamp).toLocaleString('zh-TW', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+
+                        return (
+                          <div
+                            key={log.id}
+                            onClick={() => {
+                              // Retrieve and show this log item instantly
+                              setScanType(log.scanType);
+                              setScanImage(log.image);
+                              setScanResult(log.result);
+                            }}
+                            className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-amber-400 hover:bg-amber-50/10 cursor-pointer shadow-3xs transition-all duration-200 group relative"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {/* Left image thumb */}
+                              <div className="w-12 h-12 rounded-lg border border-zinc-200 overflow-hidden flex-shrink-0 relative bg-zinc-100">
+                                <img
+                                  src={log.image}
+                                  className="w-full h-full object-cover"
+                                  alt="辨識縮圖"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+
+                              {/* Text details */}
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[8.5px] px-1.5 py-0.5 rounded border font-sans font-black leading-none ${badgeColors[log.scanType] || 'bg-zinc-100 text-zinc-650'}`}>
+                                    {scanTypeLabels[log.scanType] || '語彙'}
+                                  </span>
+                                  <span className="text-[9px] text-zinc-400 font-mono font-bold">
+                                    {formattedDate}
+                                  </span>
+                                </div>
+                                <h5 className="font-extrabold text-[12px] sm:text-[13px] text-zinc-800 truncate leading-tight group-hover:text-amber-600 transition-colors">
+                                  {log.result?.title || '未命名翻譯'}
+                                </h5>
+                                <p className="text-[10px] text-zinc-450 truncate font-semibold">
+                                  {log.result?.translatedTextZh || '點擊載入查看詳細翻譯'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Delete single log button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('確定要刪除這筆歷史翻譯紀錄嗎？')) {
+                                  setTravelLogs(prev => prev.filter(item => item.id !== log.id));
+                                }
+                              }}
+                              className="p-1 px-1.5 hover:bg-rose-50 hover:text-rose-500 text-zinc-400 border border-transparent hover:border-rose-100 rounded-lg transition-all flex items-center justify-center cursor-pointer select-none"
+                              title="刪除紀錄"
+                            >
+                              <Trash2 size={13} className="stroke-[2.2]" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Scanner Loading State */}
             {isLoading && (
               <div className="bg-white border border-zinc-200 rounded-2xl p-8 text-center shadow-xs">
@@ -1152,7 +1340,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack, onXpUpdate
                         }}
                         className="mt-3 w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        <X size={12} className="stroke-[2.5]" /> 重新上傳另一張照片
+                        <X size={12} className="stroke-[2.5]" /> 返回上傳頁 / 歷史紀錄
                       </button>
                     )}
                   </div>
@@ -1253,13 +1441,70 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack, onXpUpdate
 
                 {/* Bottom: Useful travel tips and cultural hacks from photo */}
                 {scanResult && scanResult.travelTips && (
-                  <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 sm:p-5 shadow-3xs flex gap-3">
+                  <div className="bg-amber-50/70 rounded-2xl border border-amber-200/80 p-4 sm:p-5 shadow-3xs flex gap-3">
                      <div className="bg-amber-500 text-white rounded-xl p-2 h-max shrink-0 shadow-sm border border-amber-400">
-                        <AlertTriangle size={18} className="stroke-[2.2]" />
+                        <Lightbulb size={18} className="stroke-[2.2]" />
                      </div>
-                     <div>
-                        <h6 className="font-extrabold text-amber-800 text-xs sm:text-sm">日本旅遊＆購物小貼士 (Travel Hints) :</h6>
-                        <p className="text-xs text-amber-700 mt-1 leading-relaxed font-semibold whitespace-pre-wrap">{scanResult.travelTips}</p>
+                     <div className="min-w-0 flex-1">
+                        <h6 className="font-extrabold text-amber-900 text-xs sm:text-sm">貼心提醒 (Warm Advisories) :</h6>
+                        {(() => {
+                          const lines = scanResult.travelTips
+                            .split('\n')
+                            .map((line: string) => line.trim())
+                            .filter(Boolean);
+
+                          const hasListPrefix = lines.some((line: string) => 
+                            line.startsWith('-') || 
+                            line.startsWith('*') || 
+                            line.startsWith('•') || 
+                            /^\d+\./.test(line)
+                          );
+
+                          if (lines.length <= 1 && !hasListPrefix) {
+                            return (
+                              <p className="text-xs text-amber-800 mt-1.5 leading-relaxed font-semibold whitespace-pre-wrap">
+                                {scanResult.travelTips}
+                              </p>
+                            );
+                          }
+
+                          return (
+                            <ul className="mt-2.5 space-y-2">
+                              {lines.map((line: string, idx: number) => {
+                                let cleanLine = line;
+                                let isNumbered = false;
+                                let numberStr = '';
+
+                                // Clean standard markers
+                                if (line.startsWith('-') || line.startsWith('*') || line.startsWith('•')) {
+                                  cleanLine = line.substring(1).trim();
+                                } else {
+                                  const match = line.match(/^(\d+)\.\s*(.*)/);
+                                  if (match) {
+                                    isNumbered = true;
+                                    numberStr = match[1];
+                                    cleanLine = match[2];
+                                  }
+                                }
+
+                                return (
+                                  <li key={idx} className="flex items-start gap-2 text-xs text-amber-800 font-semibold leading-relaxed">
+                                    {isNumbered ? (
+                                      <span className="text-[9px] bg-amber-200 text-amber-900 border border-amber-300 rounded-full w-4 h-4 flex items-center justify-center font-black shrink-0 mt-0.5">
+                                        {numberStr}
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-500 shrink-0 mt-1 select-none">
+                                        •
+                                      </span>
+                                    )}
+                                    <span className="flex-1 min-w-0 break-words">{cleanLine}</span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          );
+                        })()}
                      </div>
                   </div>
                 )}

@@ -150,7 +150,7 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                     <div className="bg-zinc-50 border-2 border-zinc-200 rounded-[1.2rem] sm:rounded-[2rem] p-4 sm:p-8 space-y-4 sm:space-y-6 shadow-inner">
                       <div className="space-y-1">
                         <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">日文原文</h4>
-                        <p className="text-lg sm:text-2xl font-black text-zinc-900 leading-top tracking-tighter">
+                        <p className="text-lg sm:text-2xl font-black text-zinc-900 leading-top tracking-tighter whitespace-pre-line">
                           {questions[selectedReviewIndex].question}
                         </p>
                       </div>
@@ -219,7 +219,7 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
         <AnimatePresence mode="wait">
           <motion.div key={currentQ.id} initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="bg-white rounded-xl sm:rounded-[3rem] shadow-xl p-4 sm:p-12 border border-gray-100 relative">
             {currentQ.context && <div className="mb-3 sm:mb-10 p-3.5 sm:p-8 bg-gray-50 border-l-2 sm:border-l-8 border-gray-900 text-gray-900 leading-relaxed rounded-r-lg sm:rounded-r-[2rem] text-[13px] sm:text-xl font-medium sm:font-bold shadow-inner">{currentQ.context}</div>}
-            <h3 className="text-[14px] sm:text-2xl font-extrabold sm:font-black text-gray-900 mb-4 sm:mb-12 leading-snug sm:leading-tight tracking-tight">{currentQ.question}</h3>
+            <h3 className="text-[14px] sm:text-2xl font-extrabold sm:font-black text-gray-900 mb-4 sm:mb-12 leading-snug sm:leading-tight tracking-tight whitespace-pre-line">{currentQ.question}</h3>
             <div className="grid gap-2 sm:gap-5">
               {currentQ.options.map((option, idx) => {
                 const isSelected = currentSelected === idx;
