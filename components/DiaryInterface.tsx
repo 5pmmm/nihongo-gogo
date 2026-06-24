@@ -129,7 +129,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
         </div>
         <button
           onClick={onBack}
-          className="self-start sm:self-auto px-4 py-2 text-xs sm:text-sm font-black text-zinc-600 bg-zinc-100 hover:bg-zinc-200 transition-all rounded-xl"
+          className="self-start sm:self-auto px-6 py-2.5 text-xs sm:text-sm font-black text-zinc-650 bg-zinc-100 hover:bg-zinc-200 transition-all rounded-2xl cursor-pointer active:scale-98"
         >
           返回首頁
         </button>
@@ -201,10 +201,10 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                 <button
                   onClick={handleCorrectDiary}
                   disabled={isLoading || !diaryContent.trim()}
-                  className={`px-6 py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 select-none shadow-sm transition-all text-white border border-zinc-950 ${
+                  className={`px-8 py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 select-none shadow-sm transition-all text-white border border-zinc-950 ${
                     isLoading || !diaryContent.trim()
                       ? 'bg-zinc-300 border-zinc-300 cursor-not-allowed opacity-75 shadow-none'
-                      : 'bg-zinc-800 hover:bg-zinc-900 active:scale-98'
+                      : 'bg-zinc-800 hover:bg-zinc-900 active:scale-98 cursor-pointer'
                   }`}
                 >
                   <Sparkles size={16} />
@@ -374,21 +374,21 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                               }`}
                             >
                               <Volume2 size={12} />
-                              {isPlayingText ? '停止播放' : '日文發音朗讀'}
+                              {isPlayingText ? '停止播放' : '日文朗讀'}
                             </button>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                           {/* Original Text Column */}
-                          <div className="bg-zinc-50/80 border border-zinc-200/60 rounded-2xl p-5 relative">
-                            <div className="flex items-center justify-between pb-3 border-b border-zinc-150/50 mb-3">
-                              <span className="px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-550 text-[10px] font-bold font-sans">
-                                我的原文
+                          <div className="bg-zinc-50/50 border border-zinc-200 rounded-2xl p-5 relative">
+                            <div className="flex items-center justify-between pb-3 border-b border-zinc-200/50 mb-3">
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[10px] font-bold font-sans">
+                                原文
                               </span>
                               <button
                                 onClick={() => handleCopyText(displayEntry.content, 998)}
-                                className={`flex items-center gap-1 text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-xl transition-all cursor-pointer border select-none shadow-3xs ${
+                                className={`flex items-center gap-1.5 text-[10px] sm:text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer border select-none shadow-3xs active:scale-95 ${
                                   copiedIndex === 998
                                     ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500'
                                     : 'bg-white hover:bg-zinc-100 text-zinc-650 border-zinc-200'
@@ -411,7 +411,7 @@ export const DiaryInterface: React.FC<DiaryInterfaceProps> = ({ onBack, onXpUpda
                               </span>
                               <button
                                 onClick={() => handleCopyText(displayEntry.analysis.correctedFullText, 999)}
-                                className={`flex items-center gap-1 text-[10px] sm:text-xs font-black px-2.5 py-1.5 rounded-xl transition-all cursor-pointer border select-none shadow-sm ${
+                                className={`flex items-center gap-1 text-[10px] sm:text-xs font-black px-2.5 py-1.5 rounded-xl transition-all cursor-pointer border select-none shadow-sm active:scale-95 ${
                                   copiedIndex === 999
                                     ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500'
                                     : 'bg-zinc-800 hover:bg-zinc-900 text-white border-zinc-800'

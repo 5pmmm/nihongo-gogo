@@ -346,6 +346,8 @@ function App() {
   const [learningMethod, setLearningMethod] = useState<LearningMethod>('MANUAL');
   const [selectedLevel, setSelectedLevel] = useState<JLPTLevel>('N5');
   const [recommendCount, setRecommendCount] = useState<number>(5);
+  const [customCountInput, setCustomCountInput] = useState<string>('');
+  const [isCustomCount, setIsCustomCount] = useState<boolean>(false);
   const [recommendWordCategory, setRecommendWordCategory] = useState<string>("日常用語");
   const [showRecommendModal, setShowRecommendModal] = useState<boolean>(false);
   const [input, setInput] = useState('');
@@ -678,11 +680,11 @@ function App() {
                       <p className="text-xs sm:text-base text-zinc-500 font-bold mt-2">
                         {inputMode === 'WORD' ? (
                           <span>
-                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級 • 學習系列：<span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{recommendWordCategory}</span>
+                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級 • 學習系列：<span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{recommendWordCategory}</span> (推薦 {recommendCount} 個)
                           </span>
                         ) : inputMode === 'GRAMMAR' ? (
                           <span>
-                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級文法
+                            目前設定：JLPT <span className="text-zinc-900 border-b border-zinc-900 pb-0.5 font-black">{selectedLevel}</span> 級文法 (推薦 {recommendCount} 個)
                           </span>
                         ) : (
                           <span>
@@ -695,7 +697,7 @@ function App() {
                       <button 
                         type="button"
                         onClick={() => setShowRecommendModal(true)} 
-                        className="px-4.5 py-2 text-xs sm:text-sm font-bold bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl transition shadow-sm flex items-center gap-2"
+                        className="px-8 sm:px-12 py-3 text-xs sm:text-sm font-black bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2 tracking-wide cursor-pointer active:scale-98"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-zinc-500">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
@@ -1447,7 +1449,7 @@ function App() {
                           key={cat.key}
                           type="button"
                           onClick={() => setRecommendWordCategory(cat.key)}
-                          className={`p-3.5 rounded-xl border text-sm font-bold text-left transition flex items-center gap-2 ${recommendWordCategory === cat.key ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700'}`}
+                          className={`p-4 rounded-2xl border text-sm font-black text-left transition-all flex items-center gap-2 cursor-pointer active:scale-97 ${recommendWordCategory === cat.key ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-750 hover:border-zinc-300'}`}
                         >
                           <span className="truncate">{cat.icon}</span>
                         </button>
@@ -1469,7 +1471,7 @@ function App() {
                         key={level}
                         type="button"
                         onClick={() => setSelectedLevel(level)}
-                        className={`py-3 rounded-xl border text-base font-black text-center transition ${selectedLevel === level ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700'}`}
+                        className={`py-3.5 sm:py-4 rounded-2xl border text-base font-black text-center transition-all cursor-pointer active:scale-95 ${selectedLevel === level ? 'border-zinc-900 bg-zinc-950 text-white shadow-md' : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-zinc-300'}`}
                       >
                         {level}
                       </button>
@@ -1484,6 +1486,84 @@ function App() {
                   </p>
                 </div>
 
+                {inputMode !== 'READING' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-black text-zinc-900 border-l-4 border-zinc-950 pl-2">
+                        {inputMode === 'WORD' ? '3. 推薦單字數量' : '2. 推薦文法數量'}
+                      </label>
+                      <span className="text-xs text-zinc-500 font-bold">當前設定：{recommendCount} 個</span>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      {/* Preset options */}
+                      <div className="grid grid-cols-6 gap-2">
+                        {([1, 2, 3, 4, 5] as number[]).map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              setRecommendCount(num);
+                              setCustomCountInput('');
+                              setIsCustomCount(false);
+                            }}
+                            className={`py-3 rounded-2xl border text-xs sm:text-sm font-black text-center transition-all cursor-pointer active:scale-95 ${
+                              recommendCount === num && !isCustomCount
+                                ? 'border-zinc-900 bg-zinc-950 text-white shadow-md'
+                                : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-zinc-300'
+                            }`}
+                          >
+                            {num} 個
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomCount(true);
+                            if (!customCountInput) {
+                              setCustomCountInput(recommendCount.toString());
+                            }
+                          }}
+                          className={`py-3 rounded-2xl border text-xs sm:text-sm font-black text-center transition-all cursor-pointer active:scale-95 ${
+                            isCustomCount || recommendCount > 5
+                              ? 'border-zinc-900 bg-zinc-950 text-white shadow-md'
+                              : 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 hover:border-zinc-300'
+                          }`}
+                        >
+                          自訂 ✍️
+                        </button>
+                      </div>
+
+                      {/* Custom input panel */}
+                      {(isCustomCount || recommendCount > 5) && (
+                        <div className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 p-3 rounded-2xl animate-fadeIn">
+                          <span className="text-xs font-black text-zinc-600">自行輸入推薦數量：</span>
+                          <div className="relative flex-1">
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={customCountInput}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCustomCountInput(val);
+                                const num = parseInt(val, 10);
+                                if (!isNaN(num) && num > 0) {
+                                  setRecommendCount(num);
+                                }
+                              }}
+                              placeholder="例如: 10"
+                              className="w-full px-3 py-2 bg-white border border-zinc-300 rounded-xl text-xs sm:text-sm font-bold text-zinc-900 focus:outline-none focus:border-zinc-950"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">個</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-bold whitespace-nowrap">(建議 1-15)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {inputMode === 'READING' && (
                   <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-150 space-y-1.5 text-left">
                     <div className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
@@ -1495,10 +1575,10 @@ function App() {
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-2">
+                 <div className="flex gap-4 pt-4 border-t border-zinc-100">
                   <button
                     onClick={() => setShowRecommendModal(false)}
-                    className="flex-1 py-3 text-sm font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition"
+                    className="flex-1 py-3.5 px-6 text-sm font-black bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-2xl transition-all cursor-pointer active:scale-98"
                   >
                     關閉
                   </button>
@@ -1507,7 +1587,7 @@ function App() {
                       setShowRecommendModal(false);
                       handleLearn();
                     }}
-                    className="flex-1 py-3 text-sm font-bold bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl transition shadow-md flex items-center justify-center gap-2"
+                    className="flex-1 py-3.5 px-6 text-sm font-black bg-zinc-950 hover:bg-zinc-800 text-white rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                   >
                     🚀 確定並開始推薦
                   </button>

@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "AssistantQuery": {
+      "title": "AssistantQuery",
+      "description": "Represents an AI assistant study record saved for cross-device syncing.",
+      "type": "object",
+      "properties": {
+        "syncKey": {
+          "type": "string",
+          "description": "User's specific sync key."
+        },
+        "query": {
+          "type": "string",
+          "description": "User's query text."
+        },
+        "responseJson": {
+          "type": "string",
+          "description": "AI response payload as a serialized JSON string."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Millisecond timestamp of the query."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-side creation timestamp."
+        }
+      },
+      "required": [
+        "syncKey",
+        "query",
+        "responseJson",
+        "timestamp",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "assistant_queries/{queryId}": {
+      "schema": "AssistantQuery",
+      "description": "Collection of synced assistant queries and results."
+    }
+  }
+}
