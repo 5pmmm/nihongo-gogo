@@ -6,6 +6,61 @@ import { WordDefinition, GrammarDefinition, QuizQuestion } from '../types';
 import { Loader } from './Loader';
 import { Button } from './Button';
 
+const cleanOptionText = (text: string): string => {
+  if (!text) return '';
+  let cleaned = text.trim();
+  
+  // Clean alphabet prefixes like "A. ", "A、", "A ", "a. "
+  cleaned = cleaned.replace(/^[A-Da-d](?:\s*[\.\:\,）\)\、\s．：，])\s*/, '');
+  
+  // Clean numeric prefixes like "1. ", "1、", "1) " but NOT followed by an arrow like "→" or "->"
+  cleaned = cleaned.replace(/^[1-4](?:\s*[\.\:\,）\)\、．：，])\s*/, '');
+  
+  return cleaned.trim();
+};
+
+const renderOptionText = (text: string, isResultView = false) => {
+  if (!text) return null;
+  
+  const hasArrow = text.includes('→') || text.includes('->');
+  if (hasArrow) {
+    const parts = text.split(/\s*\((.*?)\)/);
+    if (parts.length >= 2) {
+      const sequenceStr = parts[0];
+      const sentenceStr = parts[1];
+      const steps = sequenceStr.split(/\s*(?:→|->)\s*/).map(s => s.trim()).filter(Boolean);
+      
+      return (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4 flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
+            {steps.map((step, idx) => (
+              <div key={idx} className="flex items-center gap-1">
+                {idx > 0 && (
+                  <span className="text-zinc-400 font-bold text-xs sm:text-sm">→</span>
+                )}
+                <span className="inline-flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 rounded-lg bg-zinc-100 text-zinc-800 font-mono font-black text-xs sm:text-sm border border-zinc-200 shadow-sm">
+                  {step}
+                </span>
+              </div>
+            ))}
+          </div>
+          {sentenceStr && (
+            <span className="text-zinc-600 font-sans text-xs sm:text-base bg-zinc-50 border border-zinc-200/60 rounded-xl px-2.5 py-1 font-medium tracking-wide">
+              {sentenceStr}
+            </span>
+          )}
+        </div>
+      );
+    }
+  }
+
+  return (
+    <span className={isResultView ? "break-words leading-tight" : "text-xs sm:text-xl tracking-tight leading-snug pr-2 break-words text-left"}>
+      {text}
+    </span>
+  );
+};
+
 interface QuizProps {
   sourceWords: WordDefinition[];
   sourceGrammar: GrammarDefinition[];
@@ -33,7 +88,7 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
           if (!q.options || q.options.length <= 1) return q;
 
           // Track original position of each option
-          const indexedOptions = q.options.map((opt, index) => ({ opt, index }));
+          const indexedOptions = q.options.map((opt, index) => ({ opt: cleanOptionText(opt), index }));
 
           // Fisher-Yates shuffle
           for (let i = indexedOptions.length - 1; i > 0; i--) {
@@ -107,9 +162,10 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
             const isCorrect = userAnswers[idx] === q.correctAnswerIndex;
             return (
               <motion.div
-                layoutId={`question-card-${idx}`}
                 key={q.id}
                 onClick={() => setSelectedReviewIndex(idx)}
+                whileHover={{ y: -3, scale: 1.01, transition: { duration: 0.2 } }}
+                whileTap={{ scale: 0.98 }}
                 className={`p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border transition-all cursor-pointer ${
                   isCorrect ? 'bg-white border-gray-100 hover:border-gray-300 shadow-sm' : 'bg-red-50/10 border-red-100 hover:bg-red-50/20 shadow-sm'
                 }`}
@@ -137,8 +193,22 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
 
         <AnimatePresence>
           {selectedReviewIndex !== null && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-md" onClick={() => setSelectedReviewIndex(null)}>
-              <motion.div layoutId={`question-card-${selectedReviewIndex}`} className="w-full max-w-lg bg-white rounded-[1.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col mx-4" onClick={e => e.stopPropagation()}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/45 backdrop-blur-md"
+              onClick={() => setSelectedReviewIndex(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 15, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 350 }}
+                className="w-full max-w-lg bg-white rounded-[1.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col mx-4"
+                onClick={e => e.stopPropagation()}
+              >
                  <div className="p-4 sm:p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                     <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">題目詳解 • 第 {selectedReviewIndex + 1} 題</h3>
                     <button onClick={() => setSelectedReviewIndex(null)} className="p-3 bg-white rounded-full text-gray-400 hover:text-gray-900 transition-all shadow-sm">
@@ -182,9 +252,25 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                         const isSelected = userAnswers[selectedReviewIndex] === i;
                         const isCorrect = questions[selectedReviewIndex].correctAnswerIndex === i;
                         let style = "border-gray-100 text-gray-400 bg-gray-50/30";
-                        if (isCorrect) style = "border-green-500/30 bg-green-50 text-green-700 font-bold ring-4 ring-green-100/50";
-                        else if (isSelected && !isCorrect) style = "border-red-500/30 bg-red-50 text-red-600 ring-4 ring-red-100/50";
-                        return <div key={i} className={`p-3 sm:p-6 border rounded-xl sm:rounded-2xl flex justify-between items-center transition-all text-sm sm:text-lg ${style}`}><span>{opt}</span>{isCorrect && <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="currentColor" className="w-4 h-4 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}</div>;
+                        let badgeStyle = "bg-zinc-100 text-zinc-500";
+                        if (isCorrect) {
+                          style = "border-green-500/30 bg-green-50 text-green-700 font-bold ring-4 ring-green-100/50";
+                          badgeStyle = "bg-green-600 text-white";
+                        } else if (isSelected && !isCorrect) {
+                          style = "border-red-500/30 bg-red-50 text-red-600 ring-4 ring-red-100/50";
+                          badgeStyle = "bg-red-500 text-white";
+                        }
+                        return (
+                          <div key={i} className={`p-3 sm:p-5 border rounded-xl sm:rounded-2xl flex items-center justify-between gap-3 transition-all text-sm sm:text-lg ${style}`}>
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold sm:font-black text-xs sm:text-sm flex-shrink-0 ${badgeStyle}`}>
+                                {['A', 'B', 'C', 'D'][i]}
+                              </div>
+                              {renderOptionText(opt, true)}
+                            </div>
+                            {isCorrect && <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="currentColor" className="w-4 h-4 sm:w-6 sm:h-6 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                          </div>
+                        );
                       })}
                     </div>
 
@@ -231,10 +317,23 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                   else if (isSelected) btnClass = "bg-red-50 border-red-200 text-red-600 ring-2 ring-red-100";
                   else btnClass = "opacity-30 border-transparent bg-gray-50/20 grayscale";
                 } else btnClass += " hover:bg-white hover:border-gray-900 hover:shadow-xl hover:scale-[1.01]";
+                
+                let badgeClass = "bg-zinc-100 text-zinc-500";
+                if (hasAnswered) {
+                  if (isCorrect) badgeClass = "bg-green-600 text-white";
+                  else if (isSelected) badgeClass = "bg-red-500 text-white";
+                  else badgeClass = "bg-zinc-100 text-zinc-300 opacity-50";
+                }
+                
                 return (
-                  <motion.button key={idx} onClick={() => handleAnswer(idx)} className={`w-full text-left p-2.5 sm:p-6 rounded-lg sm:rounded-2xl font-medium sm:font-black transition-all duration-300 relative overflow-hidden border ${btnClass}`} disabled={hasAnswered} whileHover={!hasAnswered ? { y: -3 } : {}} whileTap={!hasAnswered ? { scale: 0.98 } : {}}>
+                  <motion.button key={idx} onClick={() => handleAnswer(idx)} className={`w-full text-left p-2.5 sm:p-5 rounded-lg sm:rounded-2xl font-medium sm:font-black transition-all duration-300 relative overflow-hidden border ${btnClass}`} disabled={hasAnswered} whileHover={!hasAnswered ? { y: -3 } : {}} whileTap={!hasAnswered ? { scale: 0.98 } : {}}>
                     <div className="flex justify-between items-center relative z-10 w-full">
-                        <span className="text-xs sm:text-xl tracking-tight leading-snug pr-2 break-words">{option}</span>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold sm:font-black text-xs sm:text-sm flex-shrink-0 transition-colors ${badgeClass}`}>
+                            {['A', 'B', 'C', 'D'][idx]}
+                          </div>
+                          {renderOptionText(option, false)}
+                        </div>
                         {hasAnswered && isCorrect && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-green-600 bg-white/80 rounded-full p-0.5 sm:p-2 shadow-md flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="currentColor" className="w-3.5 h-3.5 sm:w-6 sm:h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></motion.span>}
                     </div>
                   </motion.button>

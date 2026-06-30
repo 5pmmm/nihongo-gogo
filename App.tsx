@@ -715,15 +715,6 @@ function App() {
                   />
                 )}
                 <div className="flex justify-center gap-3 xs:gap-4 pb-5 sm:pb-0">
-                  <Button 
-                    onClick={handleLearn} 
-                    disabled={loading} 
-                    variant="gray"
-                    size={loading ? 'sm' : 'md'} 
-                    className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-zinc-200"
-                  >
-                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : '開始解析'}
-                  </Button>
                   {learningMethod !== 'RECOMMEND' && (
                     <Button 
                       onClick={() => setInput('')} 
@@ -735,6 +726,15 @@ function App() {
                       一鍵刪除
                     </Button>
                   )}
+                  <Button 
+                    onClick={handleLearn} 
+                    disabled={loading} 
+                    variant="gray"
+                    size={loading ? 'sm' : 'md'} 
+                    className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-zinc-200"
+                  >
+                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : '開始解析'}
+                  </Button>
                 </div>
               </div>
             </motion.div>

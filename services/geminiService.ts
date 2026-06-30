@@ -764,6 +764,7 @@ export const generateQuizFromContent = async (words: WordDefinition[], grammar: 
          
       CRITICAL LANGUAGE & METADATA GUIDELINES:
       - Use ONLY Traditional Chinese (zh-TW, 台灣繁體中文) for all explanations, instructions, options, and translations.
+      - **CRITICAL OPTION FORMATTING GUIDELINE**: The 4 elements inside the 'options' array **MUST NOT** contain any alphabetic or numeric prefixes (such as "A. ", "B. ", "C. ", "D. ", "A ", "B ", "C ", "D ", "A、", "B、", "C、", "D、" or "1. ", "2. ", "3. ", "4. "). Return only the **raw content/text** of the option itself. Do not add any alphabetical or numerical labels in front of options, as the client app shuffles the options and renders its own dynamic labels.
       - 'questionReading': ALWAYS provide the full furigana/phonetic reading guide in Hiragana/Katakana for the complete 'question' text.
       - 'questionTranslation': Provide a complete, beautiful, and natural Traditional Chinese translation of the whole 'question' text.
       - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit of why they are incorrect.
