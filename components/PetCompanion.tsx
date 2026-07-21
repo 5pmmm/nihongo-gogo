@@ -7,6 +7,7 @@ interface PetCompanionProps {
   stats: PetStats;
   onClick: () => void;
   compact?: boolean;
+  hideDetails?: boolean;
 }
 
 const PHRASES = [
@@ -19,7 +20,7 @@ const PHRASES = [
   "一歩ずつ進もう。 (一步一步前進吧。)",
 ];
 
-export const PetCompanion: React.FC<PetCompanionProps> = ({ stats, onClick, compact = false }) => {
+export const PetCompanion: React.FC<PetCompanionProps> = ({ stats, onClick, compact = false, hideDetails = false }) => {
   const [message, setMessage] = useState<string | null>(null);
 
   const handleInteraction = () => {
@@ -36,6 +37,7 @@ export const PetCompanion: React.FC<PetCompanionProps> = ({ stats, onClick, comp
   // Pet Visuals (Simple SVG "Ink Spirit")
   const renderPetBody = () => {
     const isFocus = stats.mood === 'focus';
+    const costume = stats.activeCostume || 'normal';
     
     return (
       <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
@@ -146,38 +148,40 @@ export const PetCompanion: React.FC<PetCompanionProps> = ({ stats, onClick, comp
         {renderPetBody()}
       </motion.div>
 
-      <div className="mt-6 w-64">
-        <div className="flex justify-between text-sm font-bold text-gray-600 mb-1">
-          <span>Lv. {stats.level}</span>
-          <span>{stats.currentXp} / {stats.nextLevelXp} XP</span>
+      {!hideDetails && (
+        <div className="mt-6 w-64">
+          <div className="flex justify-between text-sm font-bold text-gray-600 mb-1">
+            <span>Lv. {stats.level}</span>
+            <span>{stats.currentXp} / {stats.nextLevelXp} XP</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <motion.div 
+              className="bg-gray-800 h-2.5 rounded-full" 
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.min((stats.currentXp / stats.nextLevelXp) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-center text-[10px] text-gray-400 mt-3 font-black uppercase tracking-widest">學習統計</p>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+             <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
+                <p className="text-[10px] text-zinc-400 font-bold">專注</p>
+                <p className="text-sm font-black text-zinc-800">{Math.floor(stats.totalFocusMinutes / 60)}h {stats.totalFocusMinutes % 60}m</p>
+             </div>
+             <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
+                <p className="text-[10px] text-zinc-400 font-bold">單字</p>
+                <p className="text-sm font-black text-zinc-800">{stats.totalWordsAnalyzed}</p>
+             </div>
+             <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
+                <p className="text-[10px] text-zinc-400 font-bold">文法</p>
+                <p className="text-sm font-black text-zinc-800">{stats.totalGrammarAnalyzed}</p>
+             </div>
+             <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
+                <p className="text-[10px] text-zinc-400 font-bold">測驗</p>
+                <p className="text-sm font-black text-zinc-800">{stats.totalQuizzesFinished}</p>
+             </div>
+          </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
-          <motion.div 
-            className="bg-gray-800 h-2.5 rounded-full" 
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.min((stats.currentXp / stats.nextLevelXp) * 100, 100)}%` }}
-          />
-        </div>
-        <p className="text-center text-[10px] text-gray-400 mt-3 font-black uppercase tracking-widest">學習統計</p>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-           <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
-              <p className="text-[10px] text-zinc-400 font-bold">專注</p>
-              <p className="text-sm font-black text-zinc-800">{Math.floor(stats.totalFocusMinutes / 60)}h {stats.totalFocusMinutes % 60}m</p>
-           </div>
-           <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
-              <p className="text-[10px] text-zinc-400 font-bold">單字</p>
-              <p className="text-sm font-black text-zinc-800">{stats.totalWordsAnalyzed}</p>
-           </div>
-           <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
-              <p className="text-[10px] text-zinc-400 font-bold">文法</p>
-              <p className="text-sm font-black text-zinc-800">{stats.totalGrammarAnalyzed}</p>
-           </div>
-           <div className="bg-zinc-50 p-2 rounded-xl border border-zinc-100 text-center">
-              <p className="text-[10px] text-zinc-400 font-bold">測驗</p>
-              <p className="text-sm font-black text-zinc-800">{stats.totalQuizzesFinished}</p>
-           </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

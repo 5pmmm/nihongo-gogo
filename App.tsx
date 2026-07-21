@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WordDefinition, DailyRecord, AppMode, QuizConfig, InputMode, GrammarDefinition, PetStats, Achievement, TimerState, ReadingMaterial, LearningMethod, JLPTLevel } from './types';
+import { WordDefinition, DailyRecord, AppMode, QuizConfig, InputMode, GrammarDefinition, PetStats, Achievement, TimerState, ReadingMaterial, LearningMethod, JLPTLevel, ACHIEVEMENTS } from './types';
 import { fetchWordDefinitions, fetchGrammarDetails, fetchRecommendedWords, fetchRecommendedGrammar, analyzeReadingText, generateRecommendedReading } from './services/geminiService';
 import { WordCard } from './components/WordCard';
 import { GrammarCard } from './components/GrammarCard';
@@ -10,15 +10,14 @@ import { ChatInterface } from './components/ChatInterface';
 import { Quiz } from './components/Quiz';
 import { Button } from './components/Button';
 import { PetCompanion } from './components/PetCompanion';
-import { PomodoroTimer } from './components/PomodoroTimer';
 import { AIAssistant } from './components/AIAssistant';
-import { MiniTimer } from './components/MiniTimer';
 import { DiaryInterface } from './components/DiaryInterface';
+import { ProfileView } from './components/ProfileView';
 
 // Icons
 const BookIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>;
 const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
-const FocusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>;
+const ProfileIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>;
 const ChatIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>;
 const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3 15l5.096-.813L9 9l.813 5.187L15 15l-5.187.904zM18.007 7.007l-.507 2.493-2.493-.507L15 7l.507-2.493 2.493.507L18 7l-.007.007z" /></svg>;
 const DiaryIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>;
@@ -150,64 +149,6 @@ function SplashIntro({ onComplete }: any) {
   );
 }
 
-const ACHIEVEMENTS: Achievement[] = [
-  { 
-    id: 'first_step', 
-    title: '初出茅廬', 
-    description: '完成第一次專注練習', 
-    icon: '', 
-    condition: (stats) => stats.totalFocusMinutes >= 1,
-    trivia: '你知道嗎？在古日本，人們是用香燃燒的時間來計時的。'
-  },
-  { 
-    id: 'focus_master_bronze', 
-    title: '專注新手', 
-    description: '累積專注時間達到 60 分鐘', 
-    icon: '', 
-    condition: (stats) => stats.totalFocusMinutes >= 60,
-    trivia: '「一生懸命」（いっしょうけんめい）原意是拼命守護領地，現在則是用來表示非常努力。'
-  },
-  { 
-    id: 'vocab_hunter', 
-    title: '單字獵人', 
-    description: '累積解析超過 20 個單字', 
-    icon: '', 
-    condition: (stats) => stats.totalWordsAnalyzed >= 20,
-    trivia: '日語單字中，約有 50% 是漢語詞彙（來自中文），35% 是和語（固有詞），10% 是外來語。'
-  },
-  { 
-    id: 'grammar_sage', 
-    title: '文法賢者', 
-    description: '累積解析超過 10 個文法點', 
-    icon: '', 
-    condition: (stats) => stats.totalGrammarAnalyzed >= 10,
-    trivia: '日語是「主賓謂」結構（SOV），與中文的「主謂賓」（SVO）截然不同。'
-  },
-  { 
-    id: 'chat_enthusiast', 
-    title: '對話熱衷', 
-    description: '與 AI 聊天次數超過 20 次', 
-    icon: '', 
-    condition: (stats) => stats.totalChatMessages >= 20,
-    trivia: '日語的對話中有大量的「相槌」（あいづち），表示這在聽對方說話，是日本社交禮儀的重要部分。'
-  },
-  { 
-    id: 'quiz_master', 
-    title: '測驗達人', 
-    description: '完成 5 次練習測驗', 
-    icon: '', 
-    condition: (stats) => stats.totalQuizzesFinished >= 5,
-    trivia: 'JLPT（日本語能力試驗）全世界每年有超過 100 萬人報考喔！'
-  },
-  { 
-    id: 'listening_lover', 
-    title: '順風耳', 
-    description: '完成 3 次聽力練習', 
-    icon: '', 
-    condition: (stats) => stats.totalListeningPractices >= 3,
-    trivia: '江戶時代的日本有一種職業叫「十手」，他們會通過聽腳步聲來辨別嫌疑人。'
-  }
-];
 
 const INITIAL_PET_STATS: PetStats = { 
   level: 1, 
@@ -345,6 +286,7 @@ function App() {
 
   const [learningMethod, setLearningMethod] = useState<LearningMethod>('MANUAL');
   const [selectedLevel, setSelectedLevel] = useState<JLPTLevel>('N5');
+  const [quizQuestionCount, setQuizQuestionCount] = useState<number>(10);
   const [recommendCount, setRecommendCount] = useState<number>(5);
   const [customCountInput, setCustomCountInput] = useState<string>('');
   const [isCustomCount, setIsCustomCount] = useState<boolean>(false);
@@ -528,7 +470,7 @@ function App() {
   });
 
   const handleLearn = async () => {
-    if ((learningMethod === 'MANUAL' || learningMethod === 'QUIZ') && !input.trim()) return;
+    if (learningMethod === 'MANUAL' && !input.trim()) return;
     setLoading(true);
     
     try {
@@ -536,8 +478,10 @@ function App() {
          setQuizConfig({ 
             sourceWords: [], 
             sourceGrammar: [], 
-            dateLabel: "AI 定製練習",
-            specificPrompt: input 
+            dateLabel: input.trim() ? "AI 定製練習" : "日文綜合練習測驗",
+            specificPrompt: input.trim() || "請為我生成一套日文綜合練習測驗。",
+            questionCount: quizQuestionCount,
+            jlptLevel: undefined
          });
          
          const today = new Date().toISOString().split('T')[0];
@@ -706,10 +650,48 @@ function App() {
                       </button>
                     </div>
                   </div>
+                ) : learningMethod === 'QUIZ' ? (
+                  <div className="space-y-4 sm:space-y-6 bg-zinc-50/30 p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-zinc-200/60 shadow-inner">
+                    {/* Question Count Selector */}
+                    <div className="space-y-2">
+                      <p className="font-extrabold text-zinc-800 text-xs sm:text-sm flex items-center gap-1.5">
+                        <span>📊</span> 1. 選擇測驗題數：
+                      </p>
+                      <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                        {[5, 10, 15, 20].map((count) => (
+                          <button
+                            key={count}
+                            type="button"
+                            onClick={() => setQuizQuestionCount(count)}
+                            className={`py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-base font-black border transition-all cursor-pointer ${
+                              quizQuestionCount === count
+                                ? 'bg-zinc-900 border-zinc-900 text-white shadow-md scale-[1.02]'
+                                : 'bg-white border-zinc-200 text-zinc-500 hover:border-zinc-300'
+                            }`}
+                          >
+                            {count} 題
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom prompt description */}
+                    <div className="space-y-2">
+                      <p className="font-extrabold text-zinc-800 text-xs sm:text-sm flex items-center gap-1.5">
+                        <span>✍️</span> 2. 指定主題或自訂單字範圍 (選填)：
+                      </p>
+                      <textarea
+                        className="w-full p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl outline-none text-sm sm:text-base text-zinc-900 font-bold h-24 sm:h-28 shadow-xs resize-none placeholder-zinc-400 focus:border-zinc-400 transition-all"
+                        placeholder="例如：輸入你想考的日文單字（以空格或逗號分隔）、特定文法主題、或情境（旅行、商務等）。若留空，AI 將隨機為您出題！" 
+                        value={input} 
+                        onChange={(e) => setInput(e.target.value)}
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <textarea
                     className="w-full p-4 sm:p-8 bg-zinc-50/50 border border-zinc-200 rounded-2xl sm:rounded-[2rem] outline-none text-base sm:text-xl text-zinc-900 font-bold h-48 sm:h-64 shadow-inner resize-none"
-                    placeholder={learningMethod === 'QUIZ' ? "輸入想測驗的內容，AI 會為你出題..." : "請輸入內容..."} 
+                    placeholder="請輸入內容..." 
                     value={input} 
                     onChange={(e) => setInput(e.target.value)}
                   />
@@ -718,7 +700,7 @@ function App() {
                   {learningMethod !== 'RECOMMEND' && (
                     <Button 
                       onClick={() => setInput('')} 
-                      disabled={loading || !input} 
+                      disabled={loading || (!input && learningMethod !== 'QUIZ')} 
                       variant="secondary"
                       size={loading ? 'sm' : 'md'} 
                       className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-rose-100 text-rose-500 hover:text-rose-700 hover:bg-rose-50/50"
@@ -733,7 +715,7 @@ function App() {
                     size={loading ? 'sm' : 'md'} 
                     className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-zinc-200"
                   >
-                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : '開始解析'}
+                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : learningMethod === 'QUIZ' ? '開始測驗' : '開始解析'}
                   </Button>
                 </div>
               </div>
@@ -913,23 +895,13 @@ function App() {
         addXp({ xp: 100, quiz: 1 });
         setMode(AppMode.LEARN);
       }} /></motion.div> : null;
-      case AppMode.FOCUS: 
+      case AppMode.PROFILE:
         return (
-          <motion.div key="focus" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-4xl mx-auto flex flex-col items-center gap-16 py-10">
-            <PomodoroTimer 
-              state={timerState} 
-              onToggle={toggleTimer} 
-              onReset={resetTimer} 
-              onSwitchMode={switchTimerMode}
-              onUpdateSettings={(f, b) => setTimerState(prev => ({ 
-                ...prev, 
-                focusDuration: f, 
-                breakDuration: b, 
-                timeLeft: (prev.mode === 'FOCUS' ? f : b) * 60,
-                isActive: false 
-              }))}
+          <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <ProfileView 
+              stats={petStats} 
+              onPetClick={() => {}} // Companion interaction on profile page does not add XP to fix the bug
             />
-            <PetCompanion stats={petStats} onClick={() => addXp({ xp: 1 })} />
           </motion.div>
         );
       case AppMode.HISTORY: {
@@ -1213,6 +1185,29 @@ function App() {
                         </p>
                       )}
 
+                      {/* Question Count Option */}
+                      <div className="pt-1 pb-4">
+                        <p className="font-extrabold text-zinc-800 text-xs sm:text-sm mb-2 flex items-center gap-1.5">
+                          <span>📊</span> 選擇複習測驗題數：
+                        </p>
+                        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                          {[5, 10, 15, 20].map((count) => (
+                            <button
+                              key={count}
+                              type="button"
+                              onClick={() => setQuizQuestionCount(count)}
+                              className={`py-2 rounded-xl text-xs sm:text-sm font-black border transition-all cursor-pointer ${
+                                quizQuestionCount === count
+                                  ? 'bg-zinc-900 border-zinc-900 text-white shadow-md'
+                                  : 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                              }`}
+                            >
+                              {count} 題
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="flex gap-3 pt-2">
                         <button 
                           disabled={!quizIncludeWords && !quizIncludeGrammar}
@@ -1230,7 +1225,7 @@ function App() {
                             if (quizSelectionGroup.userInputs && quizSelectionGroup.userInputs.length > 0) {
                               const inputList = quizSelectionGroup.userInputs.map((ui: any) => ui.text).filter(Boolean);
                               if (inputList.length > 0) {
-                                specificPrompt = `請特別針對以下當天使用者在對話框中輸入/搜尋/學習過的日文生字或文法進行客製化出題：\n${inputList.join('、 ')}`;
+                                specificPrompt = `請特別針對以下當天使用者在對話框中輸入/搜尋/學習過的日文生字 or 文法進行客製化出題：\n${inputList.join('、 ')}`;
                               }
                             }
 
@@ -1238,7 +1233,8 @@ function App() {
                               sourceWords: finalWords,
                               sourceGrammar: finalGrammar,
                               dateLabel: quizSelectionGroup.date,
-                              specificPrompt: specificPrompt
+                              specificPrompt: specificPrompt,
+                              questionCount: quizQuestionCount
                             });
                             setMode(AppMode.QUIZ);
                             setQuizSelectionGroup(null);
@@ -1319,7 +1315,7 @@ function App() {
 
       {mode !== AppMode.CHAT && (
         <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200">
-          <div className={`max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between transition-all duration-300 ${mode === AppMode.CHAT ? 'h-13 sm:h-15' : 'h-16 sm:h-20'}`}>
+          <div className={`max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between transition-all duration-300 ${mode === AppMode.CHAT ? 'h-13 sm:h-15' : 'h-16 sm:h-20'}`}>
             <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => setMode(AppMode.LEARN)}>
               <LogoIcon />
               <h1 className="text-lg sm:text-xl font-black tracking-tighter uppercase hidden sm:block">日本語ごご!</h1>
@@ -1332,12 +1328,12 @@ function App() {
                 { m: AppMode.DIARY, i: <DiaryIcon />, l: '日記' },
                 { m: AppMode.CHAT, i: <ChatIcon />, l: '對話' },
                 { m: AppMode.HISTORY, i: <ClockIcon />, l: '紀錄' },
-                { m: AppMode.FOCUS, i: <FocusIcon />, l: '專注' }
+                { m: AppMode.PROFILE, i: <ProfileIcon />, l: '個人' }
               ].map(nav => (
                 <button 
-                  key={nav.m} 
-                  onClick={() => setMode(nav.m)}
-                  className={`p-2 sm:p-3 rounded-lg sm:rounded-xl flex items-center gap-1.5 sm:gap-2 transition-all ${mode === nav.m ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-100'}`}
+                   key={nav.m} 
+                   onClick={() => setMode(nav.m)}
+                   className={`p-2 sm:p-3 rounded-lg sm:rounded-xl flex items-center gap-1.5 sm:gap-2 transition-all ${mode === nav.m ? 'bg-zinc-900 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-100'}`}
                 >
                   {nav.i} <span className="text-xs sm:text-sm font-bold hidden md:block">{nav.l}</span>
                 </button>
@@ -1350,7 +1346,7 @@ function App() {
       <main className={`mx-auto transition-all duration-300 ${
         mode === AppMode.CHAT 
           ? 'max-w-7xl pt-0 pb-0 px-0 sm:px-2 h-screen overflow-hidden flex flex-col' 
-          : 'max-w-5xl py-10 px-6 pb-28 md:pb-20'
+          : 'max-w-7xl py-10 px-6 sm:px-8 pb-28 md:pb-20'
       }`}>
         <AnimatePresence mode="wait">
            {renderContent()}
@@ -1370,7 +1366,7 @@ function App() {
           { m: AppMode.DIARY, i: <DiaryIcon />, l: '日記' },
           { m: AppMode.CHAT, i: <ChatIcon />, l: '對話' },
           { m: AppMode.HISTORY, i: <ClockIcon />, l: '紀錄' },
-          { m: AppMode.FOCUS, i: <FocusIcon />, l: '專注' }
+          { m: AppMode.PROFILE, i: <ProfileIcon />, l: '個人' }
         ].map(nav => {
           const isActive = mode === nav.m;
           return (
@@ -1389,12 +1385,6 @@ function App() {
           );
         })}
       </motion.nav>
-
-      <AnimatePresence>
-        {mode !== AppMode.FOCUS && (timerState.isActive || timerState.timeLeft < (timerState.mode === 'FOCUS' ? timerState.focusDuration : timerState.breakDuration) * 60) && (
-          <MiniTimer state={timerState} onClick={() => setMode(AppMode.FOCUS)} />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {showRecommendModal && (

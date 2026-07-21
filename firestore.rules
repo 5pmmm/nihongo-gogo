@@ -28,7 +28,7 @@ service cloud.firestore {
     // Assistant Queries collection rules
     match /assistant_queries/{queryId} {
       allow create: if isValidAssistantQuery(request.resource.data) && isValidId(queryId);
-      allow get, list: if resource.data.syncKey != null && resource.data.syncKey.size() <= 100;
+      allow get, list: if resource.data.syncKey != null;
       allow update, delete: if false;
     }
   }

@@ -51,33 +51,206 @@ export const ListeningPractice: React.FC<ListeningPracticeProps> = ({ onBack, on
     }
   };
 
+  const playSessionRef = useRef<number>(0);
+
+  // Trigger voice loading on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      const handleVoicesChanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+      };
+    }
+  }, []);
+
+  const getJaVoices = () => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return { male: null, female: null, defaultVoice: null };
+    const voices = window.speechSynthesis.getVoices();
+    const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+    
+    if (jaVoices.length === 0) {
+      return { male: null, female: null, defaultVoice: null };
+    }
+
+    const femaleKeywords = ['nanami', 'kyoko', 'haruka', 'shiori', 'mayu', 'female', 'siri', 'ichona'];
+    const maleKeywords = ['keita', 'otoya', 'ichiro', 'naofumi', 'kazuya', 'yuto', 'takumi', 'male', 'koutarou'];
+
+    const findBestVoice = (keywords: string[], preferredGender?: 'male' | 'female') => {
+      const naturalVoices = jaVoices.filter(v => 
+        v.name.toLowerCase().includes('natural') || 
+        v.name.toLowerCase().includes('online') || 
+        v.name.toLowerCase().includes('neural')
+      );
+      for (const voice of naturalVoices) {
+        if (keywords.some(kw => voice.name.toLowerCase().includes(kw))) {
+          return voice;
+        }
+      }
+
+      const googleVoice = jaVoices.find(v => v.name.toLowerCase().includes('google'));
+      if (googleVoice && preferredGender !== 'male') return googleVoice;
+
+      for (const voice of jaVoices) {
+        if (keywords.some(kw => voice.name.toLowerCase().includes(kw))) {
+          return voice;
+        }
+      }
+
+      if (preferredGender === 'male') {
+        const maleVoice = jaVoices.find(v => 
+          v.name.toLowerCase().includes('male') || 
+          v.name.toLowerCase().includes('otoya') || 
+          v.name.toLowerCase().includes('keita')
+        );
+        if (maleVoice) return maleVoice;
+      } else {
+        const femaleVoice = jaVoices.find(v => 
+          v.name.toLowerCase().includes('female') || 
+          v.name.toLowerCase().includes('kyoko') || 
+          v.name.toLowerCase().includes('nanami')
+        );
+        if (femaleVoice) return femaleVoice;
+      }
+
+      return null;
+    };
+
+    const femaleVoice = findBestVoice(femaleKeywords, 'female') || jaVoices[0];
+    let maleVoice = findBestVoice(maleKeywords, 'male');
+    if (!maleVoice || maleVoice.name === femaleVoice.name) {
+      maleVoice = jaVoices.find(v => v.name !== femaleVoice.name) || femaleVoice;
+    }
+
+    const defaultVoice = jaVoices.find(v => 
+      v.name.toLowerCase().includes('nanami') || 
+      v.name.toLowerCase().includes('kyoko')
+    ) || jaVoices[0];
+
+    return { male: maleVoice, female: femaleVoice, defaultVoice };
+  };
+
+  const parseDialogue = (text: string) => {
+    const cleanText = text.replace(/🎧\s*\[.*?\]/g, '').trim();
+    const lines = cleanText.split('\n');
+    const result: { speaker: 'male' | 'female' | 'default'; text: string }[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const maleMatch = trimmed.match(/^(?:男|男性|男A|男B|佐藤|鈴木|田中|山田|先生|男の子)(?:：|:| :)/);
+      const femaleMatch = trimmed.match(/^(?:女|女性|女A|女B|美咲|さくら|花子|お母さん|女の子)(?:：|:| :)/);
+
+      if (maleMatch) {
+        const dialogueText = trimmed.substring(maleMatch[0].length).trim();
+        result.push({ speaker: 'male', text: dialogueText });
+      } else if (femaleMatch) {
+        const dialogueText = trimmed.substring(femaleMatch[0].length).trim();
+        result.push({ speaker: 'female', text: dialogueText });
+      } else {
+        const generalMatch = trimmed.match(/^([^：:\s]{1,10})(?:：|:)\s*(.*)/);
+        if (generalMatch) {
+          const name = generalMatch[1].trim();
+          const dialogueText = generalMatch[2].trim();
+          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name);
+          const isFemale = /女|美咲|さくら|花子|お母さん|女性/.test(name);
+          result.push({ 
+            speaker: isMale ? 'male' : (isFemale ? 'female' : 'default'), 
+            text: dialogueText 
+          });
+        } else {
+          result.push({ speaker: 'default', text: trimmed });
+        }
+      }
+    }
+
+    if (result.length === 0) {
+      result.push({ speaker: 'default', text: cleanText });
+    }
+
+    return result;
+  };
+
+  const playDialogueText = (text: string, onDone?: () => void) => {
+    window.speechSynthesis.cancel();
+    const sessionID = ++playSessionRef.current;
+    
+    const lines = parseDialogue(text);
+    const { male, female, defaultVoice } = getJaVoices();
+    let currentLineIndex = 0;
+
+    const speakNextLine = () => {
+      if (sessionID !== playSessionRef.current) return;
+
+      if (currentLineIndex >= lines.length) {
+        onDone?.();
+        return;
+      }
+
+      const line = lines[currentLineIndex];
+      const utterance = new SpeechSynthesisUtterance(line.text);
+      utterance.lang = 'ja-JP';
+      utterance.volume = 1.0;
+
+      if (line.speaker === 'male' && male) {
+        utterance.voice = male;
+        // Optimize male voice clarity: Pitch 1.15 shifts vocal resonance higher to remove muffled/muddy chest tones.
+        // Rate 0.98 keeps speech rate moderate ("語速適中") and highly legible, making articulation clean and crisp.
+        utterance.pitch = 1.15;
+        utterance.rate = speed * 0.98;
+      } else if (line.speaker === 'female' && female) {
+        utterance.voice = female;
+        utterance.pitch = 1.0;
+        utterance.rate = speed;
+      } else if (defaultVoice) {
+        utterance.voice = defaultVoice;
+        utterance.pitch = 1.0;
+        utterance.rate = speed;
+      }
+
+      utterance.onend = () => {
+        if (sessionID === playSessionRef.current) {
+          currentLineIndex++;
+          setTimeout(speakNextLine, 750);
+        }
+      };
+
+      utterance.onerror = () => {
+        if (sessionID === playSessionRef.current) {
+          currentLineIndex++;
+          speakNextLine();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    speakNextLine();
+  };
+
   const playSegment = (index: number) => {
     if (!material) return;
     const segment = material.segments[index];
     
-    // Check if this is the first play of this segment
     const isFirst = !firstPlayDone;
     if (isFirst) {
       setFirstPlayDone(true);
     }
 
-    const utterance = new SpeechSynthesisUtterance(segment.text);
-    utterance.lang = 'ja-JP';
-    utterance.rate = speed;
-    utterance.onend = () => {
+    playDialogueText(segment.text, () => {
       if (playbackMode === 'SEGMENT' && isFirst) {
         startThinkingTimer();
       }
-    };
-    window.speechSynthesis.speak(utterance);
+    });
   };
 
   const playFull = () => {
     if (!material) return;
-    const utterance = new SpeechSynthesisUtterance(material.fullContent);
-    utterance.lang = 'ja-JP';
-    utterance.rate = speed;
-    window.speechSynthesis.speak(utterance);
+    playDialogueText(material.fullContent);
   };
 
   const startThinkingTimer = () => {

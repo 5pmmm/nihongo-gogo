@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateQuizFromContent } from '../services/geminiService';
 import { WordDefinition, GrammarDefinition, QuizQuestion } from '../types';
@@ -61,15 +61,41 @@ const renderOptionText = (text: string, isResultView = false) => {
   );
 };
 
+const typeLabels: Record<string, string> = {
+  vocab: '🏷️ 單字字彙',
+  grammar: '📝 系統文法',
+  ordering: '🔗 句子重組',
+  listening: '🎧 聽力模擬',
+  reading: '📖 閱讀理解',
+};
+
+const typeColors: Record<string, string> = {
+  vocab: 'bg-teal-50 text-teal-700 border-teal-200/50',
+  grammar: 'bg-indigo-50 text-indigo-700 border-indigo-200/50',
+  ordering: 'bg-amber-50 text-amber-700 border-amber-200/50',
+  listening: 'bg-rose-50 text-rose-700 border-rose-200/50',
+  reading: 'bg-emerald-50 text-emerald-700 border-emerald-200/50',
+};
+
 interface QuizProps {
   sourceWords: WordDefinition[];
   sourceGrammar: GrammarDefinition[];
   specificPrompt?: string; // New prop for user-defined quiz content
+  questionCount?: number; // Chosen number of questions (e.g., 5, 10, 15, 20)
+  jlptLevel?: string; // Optional target JLPT Level
   onExit: () => void;
   title?: string;
 }
 
-export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specificPrompt, onExit, title }) => {
+export const Quiz: React.FC<QuizProps> = ({ 
+  sourceWords, 
+  sourceGrammar, 
+  specificPrompt, 
+  questionCount, 
+  jlptLevel, 
+  onExit, 
+  title 
+}) => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -77,11 +103,256 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
   const [showResult, setShowResult] = useState(false);
   const [selectedReviewIndex, setSelectedReviewIndex] = useState<number | null>(null);
 
+  // Audio Playback States for Listening Questions
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showScript, setShowScript] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+
+  // Keep track of current playing session to avoid race conditions with cancels/skips
+  const playSessionRef = useRef<number>(0);
+
+  // Trigger dummy voice fetch to pre-load voices on load
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      const handleVoicesChanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+      };
+    }
+  }, []);
+
+  // Stop speech synthesis when question changes or review index changes
+  useEffect(() => {
+    window.speechSynthesis.cancel();
+    playSessionRef.current++;
+    setIsPlaying(false);
+    setShowScript(false);
+  }, [currentIndex, selectedReviewIndex]);
+
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  const getJaVoices = () => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return { male: null, female: null, defaultVoice: null };
+    const voices = window.speechSynthesis.getVoices();
+    const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+    
+    if (jaVoices.length === 0) {
+      return { male: null, female: null, defaultVoice: null };
+    }
+
+    // High quality Microsoft online voices: Nanami (female), Keita (male)
+    // macOS high quality voices: Kyoko (female), Otoya (male)
+    // Google voices: "Google 日本語"
+    const femaleKeywords = ['nanami', 'kyoko', 'haruka', 'shiori', 'mayu', 'female', 'siri', 'ichona'];
+    const maleKeywords = ['keita', 'otoya', 'ichiro', 'naofumi', 'kazuya', 'yuto', 'takumi', 'male', 'koutarou'];
+
+    const findBestVoice = (keywords: string[], preferredGender?: 'male' | 'female') => {
+      // 1. Natural / Online voices
+      const naturalVoices = jaVoices.filter(v => 
+        v.name.toLowerCase().includes('natural') || 
+        v.name.toLowerCase().includes('online') || 
+        v.name.toLowerCase().includes('neural')
+      );
+      for (const voice of naturalVoices) {
+        if (keywords.some(kw => voice.name.toLowerCase().includes(kw))) {
+          return voice;
+        }
+      }
+
+      // 2. Google Japanese / Standard high-qual voices
+      const googleVoice = jaVoices.find(v => v.name.toLowerCase().includes('google'));
+      if (googleVoice && preferredGender !== 'male') return googleVoice;
+
+      // 3. Any match
+      for (const voice of jaVoices) {
+        if (keywords.some(kw => voice.name.toLowerCase().includes(kw))) {
+          return voice;
+        }
+      }
+
+      // 4. Default gender-based
+      if (preferredGender === 'male') {
+        const maleVoice = jaVoices.find(v => 
+          v.name.toLowerCase().includes('male') || 
+          v.name.toLowerCase().includes('otoya') || 
+          v.name.toLowerCase().includes('keita')
+        );
+        if (maleVoice) return maleVoice;
+      } else {
+        const femaleVoice = jaVoices.find(v => 
+          v.name.toLowerCase().includes('female') || 
+          v.name.toLowerCase().includes('kyoko') || 
+          v.name.toLowerCase().includes('nanami')
+        );
+        if (femaleVoice) return femaleVoice;
+      }
+
+      return null;
+    };
+
+    const femaleVoice = findBestVoice(femaleKeywords, 'female') || jaVoices[0];
+    let maleVoice = findBestVoice(maleKeywords, 'male');
+    if (!maleVoice || maleVoice.name === femaleVoice.name) {
+      maleVoice = jaVoices.find(v => v.name !== femaleVoice.name) || femaleVoice;
+    }
+
+    const defaultVoice = jaVoices.find(v => 
+      v.name.toLowerCase().includes('nanami') || 
+      v.name.toLowerCase().includes('kyoko')
+    ) || jaVoices[0];
+
+    return { male: maleVoice, female: femaleVoice, defaultVoice };
+  };
+
+  const parseDialogue = (text: string) => {
+    // Clean headers like 🎧 [聽力對話模擬]
+    const cleanText = text.replace(/🎧\s*\[.*?\]/g, '').trim();
+    const lines = cleanText.split('\n');
+    const result: { speaker: 'male' | 'female' | 'default'; text: string }[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Match common speaker patterns (e.g. "男：", "男性：", "女：", "女性：", "佐藤：", "鈴木：", "A：", "B：")
+      const maleMatch = trimmed.match(/^(?:男|男性|男A|男B|佐藤|鈴木|田中|山田|先生|男の子)(?:：|:| :)/);
+      const femaleMatch = trimmed.match(/^(?:女|女性|女A|女B|美咲|さくら|花子|お母さん|女の子)(?:：|:| :)/);
+
+      if (maleMatch) {
+        const dialogueText = trimmed.substring(maleMatch[0].length).trim();
+        result.push({ speaker: 'male', text: dialogueText });
+      } else if (femaleMatch) {
+        const dialogueText = trimmed.substring(femaleMatch[0].length).trim();
+        result.push({ speaker: 'female', text: dialogueText });
+      } else {
+        // Fallback or generic speaker parsing
+        const generalMatch = trimmed.match(/^([^：:\s]{1,10})(?:：|:)\s*(.*)/);
+        if (generalMatch) {
+          const name = generalMatch[1].trim();
+          const dialogueText = generalMatch[2].trim();
+          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name);
+          const isFemale = /女|美咲|さくら|花子|お母さん|女性/.test(name);
+          result.push({ 
+            speaker: isMale ? 'male' : (isFemale ? 'female' : 'default'), 
+            text: dialogueText 
+          });
+        } else {
+          result.push({ speaker: 'default', text: trimmed });
+        }
+      }
+    }
+
+    if (result.length === 0) {
+      result.push({ speaker: 'default', text: cleanText });
+    }
+
+    return result;
+  };
+
+  const playListeningAudio = (text: string) => {
+    window.speechSynthesis.cancel();
+    
+    // Start a new playing session
+    const sessionID = ++playSessionRef.current;
+    
+    const lines = parseDialogue(text);
+    const { male, female, defaultVoice } = getJaVoices();
+    
+    let currentLineIndex = 0;
+    setIsPlaying(true);
+
+    const speakNextLine = () => {
+      // Check if this session was cancelled
+      if (sessionID !== playSessionRef.current) {
+        return;
+      }
+
+      if (currentLineIndex >= lines.length) {
+        setIsPlaying(false);
+        return;
+      }
+
+      const line = lines[currentLineIndex];
+      const utterance = new SpeechSynthesisUtterance(line.text);
+      utterance.lang = 'ja-JP';
+      utterance.volume = 1.0;
+
+      // Assign voice and optimize sound clarity/brightness
+      if (line.speaker === 'male' && male) {
+        utterance.voice = male;
+        // Optimize male voice clarity: Pitch 1.15 shifts vocal resonance higher to remove muffled/muddy chest tones.
+        // Rate 0.98 keeps speech rate moderate ("語速適中") and highly legible, making articulation clean and crisp.
+        utterance.pitch = 1.15;
+        utterance.rate = speed * 0.98;
+      } else if (line.speaker === 'female' && female) {
+        utterance.voice = female;
+        utterance.pitch = 1.0;
+        utterance.rate = speed;
+      } else if (defaultVoice) {
+        utterance.voice = defaultVoice;
+        utterance.pitch = 1.0;
+        utterance.rate = speed;
+      }
+
+      utterance.onend = () => {
+        if (sessionID === playSessionRef.current) {
+          currentLineIndex++;
+          // Simulated pause between turns in exam context: N1-N3 is slightly faster, let's do a realistic 700ms pause
+          setTimeout(speakNextLine, 750);
+        }
+      };
+
+      utterance.onerror = () => {
+        if (sessionID === playSessionRef.current) {
+          currentLineIndex++;
+          speakNextLine();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    speakNextLine();
+  };
+
+  const togglePlay = () => {
+    const currentQ = questions[currentIndex];
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      playSessionRef.current++;
+      setIsPlaying(false);
+    } else if (currentQ && currentQ.context) {
+      playListeningAudio(currentQ.context);
+    }
+  };
+
+  const handleCloseReview = () => {
+    window.speechSynthesis.cancel();
+    playSessionRef.current++;
+    setIsPlaying(false);
+    setSelectedReviewIndex(null);
+  };
+
   useEffect(() => {
     const loadQuiz = async () => {
       try {
         setLoading(true);
-        const qs = await generateQuizFromContent(sourceWords, sourceGrammar, specificPrompt);
+        const qs = await generateQuizFromContent(
+          sourceWords, 
+          sourceGrammar, 
+          specificPrompt, 
+          questionCount || 10, 
+          jlptLevel
+        );
         
         // Shuffle the options of each question to make sure options/correct index are distributed randomly
         const shuffledQuestions = qs.map(q => {
@@ -115,7 +386,7 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
       }
     };
     loadQuiz();
-  }, [sourceWords, sourceGrammar, specificPrompt]);
+  }, [sourceWords, sourceGrammar, specificPrompt, questionCount, jlptLevel]);
 
   const handleAnswer = (optionIndex: number) => {
     if (userAnswers[currentIndex] !== null) return;
@@ -164,9 +435,10 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
               <motion.div
                 key={q.id}
                 onClick={() => setSelectedReviewIndex(idx)}
-                whileHover={{ y: -3, scale: 1.01, transition: { duration: 0.2 } }}
-                whileTap={{ scale: 0.98 }}
-                className={`p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border transition-all cursor-pointer ${
+                whileHover={{ y: -2, scale: 1.005 }}
+                whileTap={{ scale: 0.995 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                className={`p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border cursor-pointer ${
                   isCorrect ? 'bg-white border-gray-100 hover:border-gray-300 shadow-sm' : 'bg-red-50/10 border-red-100 hover:bg-red-50/20 shadow-sm'
                 }`}
               >
@@ -178,10 +450,15 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                   </div>
                   <div className="flex-1">
                      <h4 className="text-gray-900 font-bold sm:font-black text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-1">{q.question}</h4>
-                     <div className="flex items-center gap-4">
+                     <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {isCorrect ? '正確' : '錯誤'}
+                           {isCorrect ? '正確' : '錯誤'}
                         </span>
+                        {q.type && (
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${typeColors[q.type] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                            {typeLabels[q.type] || '綜合測驗'}
+                          </span>
+                        )}
                         {!isCorrect && <span className="text-gray-400 text-xs sm:text-sm font-bold tracking-tight">正解: {q.options[q.correctAnswerIndex]}</span>}
                      </div>
                   </div>
@@ -199,19 +476,19 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/45 backdrop-blur-md"
-              onClick={() => setSelectedReviewIndex(null)}
+              onClick={handleCloseReview}
             >
               <motion.div
-                initial={{ scale: 0.95, y: 15, opacity: 0 }}
-                animate={{ scale: 1, y: 0, opacity: 1 }}
-                exit={{ scale: 0.95, y: 15, opacity: 0 }}
-                transition={{ type: "spring", damping: 25, stiffness: 350 }}
+                initial={{ scale: 0.94, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 15 }}
+                transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
                 className="w-full max-w-lg bg-white rounded-[1.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col mx-4"
                 onClick={e => e.stopPropagation()}
               >
                  <div className="p-4 sm:p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                     <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">題目詳解 • 第 {selectedReviewIndex + 1} 題</h3>
-                    <button onClick={() => setSelectedReviewIndex(null)} className="p-3 bg-white rounded-full text-gray-400 hover:text-gray-900 transition-all shadow-sm">
+                    <button onClick={handleCloseReview} className="p-3 bg-white rounded-full text-gray-400 hover:text-gray-900 transition-all shadow-sm">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={4} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                  </div>
@@ -244,7 +521,62 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                       )}
                     </div>
 
-                    {questions[selectedReviewIndex].context && <div className="p-4 sm:p-8 bg-gray-50 border-l-4 sm:border-l-8 border-gray-900 rounded-r-2xl sm:rounded-r-3xl text-gray-900 text-sm sm:text-xl font-bold leading-relaxed shadow-inner">{questions[selectedReviewIndex].context}</div>}
+                    {questions[selectedReviewIndex].context && (
+                      questions[selectedReviewIndex].type === 'listening' ? (
+                        <div className="bg-zinc-50 border border-zinc-200/80 rounded-[1.2rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 shadow-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">聽力播放與文字回顧</span>
+                            <div className="flex gap-1.5 items-center">
+                              <span className="text-[9px] text-zinc-400 font-bold">語速</span>
+                              {[0.8, 1.0, 1.2].map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => setSpeed(s)}
+                                  className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${speed === s ? 'bg-zinc-900 text-white shadow-xs' : 'bg-white text-zinc-500 border border-zinc-150'}`}
+                                >
+                                  {s === 1.0 ? '標準' : s === 0.8 ? '慢速' : '快速'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-zinc-150">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isPlaying) {
+                                  window.speechSynthesis.cancel();
+                                  setIsPlaying(false);
+                                } else {
+                                  playListeningAudio(questions[selectedReviewIndex].context || '');
+                                }
+                              }}
+                              className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform active:scale-95 ${isPlaying ? 'bg-rose-500 text-white animate-pulse' : 'bg-zinc-900 hover:bg-zinc-850 text-white'}`}
+                            >
+                              {isPlaying ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                              ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5 ml-0.5"><path d="M8 5v14l11-7z" /></svg>
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0 text-left">
+                              <p className="text-xs font-bold text-zinc-800 truncate">
+                                {isPlaying ? '正在播放中...' : '點擊按鈕重聽語音'}
+                              </p>
+                              <p className="text-[10px] text-zinc-400 font-medium">日本語 AI 老師語音朗讀</p>
+                            </div>
+                          </div>
+                          <div className="p-3.5 bg-white border border-zinc-150 rounded-xl text-zinc-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line font-jp shadow-inner text-left">
+                            {questions[selectedReviewIndex].context}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 sm:p-8 bg-gray-50 border-l-4 sm:border-l-8 border-gray-900 rounded-r-2xl sm:rounded-r-3xl text-gray-900 text-sm sm:text-xl font-bold leading-relaxed shadow-inner text-left">
+                          {questions[selectedReviewIndex].context}
+                        </div>
+                      )
+                    )}
                     
                     <div className="space-y-4">
                       <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">選項分析</h5>
@@ -264,7 +596,7 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                           <div key={i} className={`p-3 sm:p-5 border rounded-xl sm:rounded-2xl flex items-center justify-between gap-3 transition-all text-sm sm:text-lg ${style}`}>
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold sm:font-black text-xs sm:text-sm flex-shrink-0 ${badgeStyle}`}>
-                                {['A', 'B', 'C', 'D'][i]}
+                                {['A.', 'B.', 'C.', 'D.'][i]}
                               </div>
                               {renderOptionText(opt, true)}
                             </div>
@@ -304,7 +636,136 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
       <div className="relative min-h-[300px] sm:min-h-[500px]">
         <AnimatePresence mode="wait">
           <motion.div key={currentQ.id} initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="bg-white rounded-xl sm:rounded-[3rem] shadow-xl p-4 sm:p-12 border border-gray-100 relative">
-            {currentQ.context && <div className="mb-3 sm:mb-10 p-3.5 sm:p-8 bg-gray-50 border-l-2 sm:border-l-8 border-gray-900 text-gray-900 leading-relaxed rounded-r-lg sm:rounded-r-[2rem] text-[13px] sm:text-xl font-medium sm:font-bold shadow-inner">{currentQ.context}</div>}
+            {currentQ.type && (
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider mb-4 ${typeColors[currentQ.type] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                {typeLabels[currentQ.type] || '綜合測驗'}
+              </div>
+            )}
+            {currentQ.context && (
+              currentQ.type === 'listening' ? (
+                <div className="mb-4 sm:mb-8 bg-zinc-50 border border-zinc-200/80 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 space-y-4 shadow-sm">
+                  {/* Listening Header & Badge */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-zinc-200/60 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2.5 w-2.5 relative">
+                        {isPlaying && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isPlaying ? 'bg-rose-500' : 'bg-zinc-400'}`}></span>
+                      </span>
+                      <p className="text-xs sm:text-sm font-bold text-zinc-650">
+                        {isPlaying ? '正在播音中...' : '已準備好，請點擊播放'}
+                      </p>
+                    </div>
+                    {/* Speed Selector */}
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase mr-1">語速</span>
+                      {[0.8, 1.0, 1.2].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setSpeed(s);
+                            if (isPlaying) {
+                              playListeningAudio(currentQ.context || '');
+                            }
+                          }}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all ${
+                            speed === s
+                              ? 'bg-zinc-900 text-white shadow-xs'
+                              : 'bg-white text-zinc-550 border border-zinc-150 hover:bg-zinc-50'
+                          }`}
+                        >
+                          {s === 1.0 ? '標準' : s === 0.8 ? '慢速' : '快速'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Main Interaction Area */}
+                  <div className="flex flex-col items-center justify-center py-3 sm:py-6 space-y-3 sm:space-y-4">
+                    {/* Audio wave / Headphone animation */}
+                    <div className="flex items-end justify-center gap-1 h-6 mb-1">
+                      {[1, 2, 3, 4, 5, 4, 3, 2, 1].map((val, idx) => (
+                        <motion.div
+                          key={idx}
+                          animate={isPlaying ? {
+                            height: [10, val * 6, 10]
+                          } : {
+                            height: 10
+                          }}
+                          transition={{
+                            duration: 0.8,
+                            repeat: Infinity,
+                            delay: idx * 0.08,
+                            ease: "easeInOut"
+                          }}
+                          className={`w-0.75 rounded-full ${isPlaying ? 'bg-rose-500' : 'bg-zinc-300'}`}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={togglePlay}
+                      className={`group relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-full text-white shadow-md transition-all ${
+                        isPlaying 
+                          ? 'bg-rose-500 hover:bg-rose-600 scale-95 ring-4 ring-rose-100' 
+                          : 'bg-zinc-900 hover:bg-zinc-800 hover:scale-105 active:scale-95 ring-4 ring-zinc-100'
+                      }`}
+                    >
+                      {isPlaying ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6 ml-0.5">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 font-bold max-w-xs text-center leading-relaxed">
+                      {isPlaying ? '再次點擊可停止播音。請仔細聆聽音檔並回答問題。' : '點擊播放鈕播放日語對話/短文（不含文字原文，更考驗聽力）。'}
+                    </p>
+                  </div>
+
+                  {/* Toggle Script Button */}
+                  <div className="flex flex-col items-stretch pt-2 border-t border-zinc-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowScript(!showScript)}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-black uppercase tracking-wider border transition-all flex items-center justify-center gap-1.5 ${
+                        showScript 
+                          ? 'bg-zinc-150 text-zinc-700 border-zinc-200' 
+                          : 'bg-white text-zinc-500 border-zinc-150 hover:bg-zinc-50'
+                      }`}
+                    >
+                      <span>{showScript ? '👀 隱藏對話原文' : '📖 顯示對話原文 (輔助學習)'}</span>
+                    </button>
+                    
+                    <AnimatePresence>
+                      {showScript && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2.5 p-3 sm:p-4 bg-white border border-zinc-150 rounded-xl text-zinc-800 text-xs sm:text-sm leading-relaxed whitespace-pre-line font-jp shadow-inner text-left">
+                            {currentQ.context}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-3 sm:mb-10 p-3.5 sm:p-8 bg-gray-50 border-l-2 sm:border-l-8 border-gray-900 text-gray-900 leading-relaxed rounded-r-lg sm:rounded-r-[2rem] text-[13px] sm:text-xl font-medium sm:font-bold shadow-inner">
+                  {currentQ.context}
+                </div>
+              )
+            )}
             <h3 className="text-[14px] sm:text-2xl font-extrabold sm:font-black text-gray-900 mb-4 sm:mb-12 leading-snug sm:leading-tight tracking-tight whitespace-pre-line">{currentQ.question}</h3>
             <div className="grid gap-2 sm:gap-5">
               {currentQ.options.map((option, idx) => {
@@ -326,11 +787,11 @@ export const Quiz: React.FC<QuizProps> = ({ sourceWords, sourceGrammar, specific
                 }
                 
                 return (
-                  <motion.button key={idx} onClick={() => handleAnswer(idx)} className={`w-full text-left p-2.5 sm:p-5 rounded-lg sm:rounded-2xl font-medium sm:font-black transition-all duration-300 relative overflow-hidden border ${btnClass}`} disabled={hasAnswered} whileHover={!hasAnswered ? { y: -3 } : {}} whileTap={!hasAnswered ? { scale: 0.98 } : {}}>
+                  <motion.button key={idx} onClick={() => handleAnswer(idx)} className={`w-full text-left p-2.5 sm:p-5 rounded-lg sm:rounded-2xl font-medium sm:font-black relative overflow-hidden border ${btnClass}`} disabled={hasAnswered} whileHover={!hasAnswered ? { y: -3 } : {}} whileTap={!hasAnswered ? { scale: 0.98 } : {}}>
                     <div className="flex justify-between items-center relative z-10 w-full">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold sm:font-black text-xs sm:text-sm flex-shrink-0 transition-colors ${badgeClass}`}>
-                            {['A', 'B', 'C', 'D'][idx]}
+                          <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center font-bold sm:font-black text-xs sm:text-sm flex-shrink-0 ${badgeClass}`}>
+                            {['A.', 'B.', 'C.', 'D.'][idx]}
                           </div>
                           {renderOptionText(option, false)}
                         </div>

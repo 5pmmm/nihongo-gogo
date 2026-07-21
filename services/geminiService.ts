@@ -623,15 +623,16 @@ const quizSchema = {
     type: Type.OBJECT,
     properties: {
       id: { type: Type.STRING, description: "Unique ID" },
-      context: { type: Type.STRING, description: "Context text (e.g., short article or sentence background)" },
+      context: { type: Type.STRING, description: "Context text (e.g., short article, sentence background, or spoken script for listening)" },
       question: { type: Type.STRING, description: "Question text. For ordering, use segments like (A) (B) (C). For fill-in-blank, use ___." },
       questionReading: { type: Type.STRING, description: "Full Hiragana/Katakana reading for the question text" },
       questionTranslation: { type: Type.STRING, description: "Traditional Chinese translation for the question text" },
       options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 options" },
       correctAnswerIndex: { type: Type.INTEGER, description: "Index 0-3" },
       explanation: { type: Type.STRING, description: "Detailed explanation in Traditional Chinese. Must explain the grammar/vocabulary used." },
+      type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "listening", "reading"], description: "The type of question being generated" }
     },
-    required: ["id", "question", "questionReading", "questionTranslation", "options", "correctAnswerIndex", "explanation"],
+    required: ["id", "question", "questionReading", "questionTranslation", "options", "correctAnswerIndex", "explanation", "type"],
   },
 };
 
@@ -724,52 +725,70 @@ export const generateRecommendedReading = async (level: string): Promise<Reading
   return { ...JSON.parse(response.text), id: `r-rec-${Date.now()}` };
 };
 
-export const generateQuizFromContent = async (words: WordDefinition[], grammar: GrammarDefinition[], specificPrompt?: string): Promise<QuizQuestion[]> => {
-  const context = JSON.stringify({ words, grammar, rawInput: specificPrompt });
+export const generateQuizFromContent = async (
+  words: WordDefinition[], 
+  grammar: GrammarDefinition[], 
+  specificPrompt?: string, 
+  questionCount: number = 10,
+  jlptLevel?: string
+): Promise<QuizQuestion[]> => {
+  const context = JSON.stringify({ words, grammar, rawInput: specificPrompt, targetLevel: jlptLevel });
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
       Based on the following content context: ${context}
       
-      Your goal is to generate a highly professional, diverse, and engaging 10-question Japanese quiz that covers a balanced range of Japanese lexical, syntactic, and semantic skills.
+      Your goal is to generate a highly professional, diverse, and engaging Japanese quiz containing EXACTLY ${questionCount} questions.
       
-      MANDATORY 10-QUESTION DIVERSITY & TYPE MIX:
-      1. [3 Questions] **VOCABULARY & KANJI (單字及其用法、讀音與漢字寫法)**:
-         - 1 Kanji Reading question: Provide a sentence with a target Kanji in brackets (e.g. 「図書館」) and ask for the correct hiragana reading.
-         - 1 Kanji Writing question: Provide a sentence with a target Hiragana word in brackets (e.g. いっしょに「あそび」ましょう) and ask for the correct kanji spelling.
-         - 1 Word Usage question: Choose the correct vocabulary (noun, verb, adjective, or adverb) that fits the sentence context semantically and grammatically.
+      CRITICAL FOCUS ON USER CUSTOM WORDS AND INPUT:
+      - If 'rawInput' is provided (especially when containing Japanese words, vocabularies, sentences, or specific grammar topics input by the user) OR if 'words' / 'grammar' arrays are not empty, you MUST STRICTLY use these words and topics as the core subjects of the generated questions!
+      - For instance, if the user entered words like "猫, 食べる, 綺麗", then your vocabulary, grammar, reading, and listening questions MUST be constructed directly around these words, testing their meaning, reading, writing, or usage in context.
+      - DO NOT ignore user-entered words/topics or replace them with arbitrary, unrelated JLPT presets. Under all circumstances, the custom user input is the absolute HIGHEST priority constraint.
+      - If and only if no specific words or 'rawInput' are provided and 'targetLevel' is set, match the general difficulty level of JLPT ${jlptLevel}.
+      - Otherwise, generate a well-balanced, general Japanese practice test matching the provided content.
+      
+      You must distribute the requested ${questionCount} questions proportionally across the following 5 distinct types (aiming for roughly equal distribution, e.g., if count is 5, generate 1 of each; if count is 10, generate 2 of each; if count is 15, generate 3 of each; if count is 20, generate 4 of each):
+      
+      1. **Type: "vocab"** - VOCABULARY & KANJI & KANA JUDGMENT (單字漢字讀音與平假片假判斷題):
+         - *Kanji Reading (漢字讀音)*: Provide a sentence with a target Kanji in brackets (e.g. 「昨日」) and ask for the correct hiragana reading.
+         - *Kanji Writing (漢字書寫)*: Provide a sentence with a target Hiragana word in brackets (e.g. いっしょに「あそび」ましょう) and ask for the correct kanji spelling.
+         - *Kana Judgment (平假片假判斷)*: Test the spelling of common loanwords (e.g., 「コーヒー」, 「デパート」) or similar kana (シ/ツ, ソ/ン) or voiced/unvoiced sounds (e.g., 「てんぷら」 vs 「でんぷら」).
+         - *Word Usage (字彙用法)*: Choose the correct word (noun, verb, adjective, adverb) that fits the context semantically and grammatically.
          
-      2. [3 Questions] **GRAMMAR, CONJUGATION & PARTICLES (文法、助詞與接續填空)**:
-         - Test grammar points (e.g., ～ている, ～ほうがいい, ～なければならない) or particles (は, が, を, に, で, と, も, から, まで) in clear blanks "___".
-         - Make sure the question prompts ask clearly for the correct particle/conjugation that makes the sentence grammatically complete and natural.
+      2. **Type: "grammar"** - GRAMMAR, CONJUGATION & PARTICLES (文法、接續與助詞填空題):
+         - Test specific JLPT grammar points (e.g., ～ている, ～ほうがいい, ～なければならない) or particles (は, が, を, に, で, と, も, から, まで) in clear blanks "___".
+         - Make sure the question prompts ask clearly for the correct particle or conjugation form that makes the sentence grammatically complete and natural.
          
-      3. [2 Questions] **SENTENCE ORDERING & ARRANGEMENT (句子重組與拼湊順序題 - 並び替え)**:
-         - To avoid ANY ambiguity or confusion, follow this strict formatting structure:
-           - The 'question' MUST specify a template sentence with four numbered underlines like this: "昨日は ①＿ ②＿ ③★＿ ④＿ でした。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
+      3. **Type: "ordering"** - SENTENCE ORDERING & ARRANGEMENT (句子重組與拼湊順序題 - 並び替え):
+         - Follow this strict formatting structure:
+           - The 'question' property MUST specify a template sentence with four numbered underlines like this: "昨日は ①＿ ②＿ ③★＿ ④＿ でした。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
            - Below that template, list the 4 unordered word/phrase segments clearly using brackets (e.g. "【重組單字區：1. 友達と / 2. 楽しく / 3. 賑やかな / 4. 食事】").
            - Below that list, write the clear instruction: "請重組句子，並選出 ★ (第三個空格) 處正確的重組單字：".
-           - To make selection absolutely seamless and clear, each of the 4 elements in 'options' should represent THE ENTIRE ORDER combination showing BOTH the number sequence and the FULL resulting sentence. This prevents any confusion whatsoever about word slots and whatcompleted sentence looks like.
-             Example Options:
+           - To make selection absolutely seamless and clear, each of the 4 elements in 'options' should represent THE ENTIRE ORDER combination showing BOTH the number sequence and the FULL resulting sentence. 
+             Example Options (Notice standard arrows):
              - "1 → 4 → 3 → 2 (友達と 食事 賑やかな 楽しく)"
-             - "1 → 2 → 4 → 3 (友達と 楽しく 食事 賑やかな)"
+             - "1 → 2 → 4 → 3 (友達與其它組搭配...)"
              - "2 → 1 → 3 → 4 (楽しく 友達と 賑やかな 食事)"
-             - "4 → 1 → 3 → 2 (食事 友達と 賑やかな 楽しく)"
+             - "4 → 1 → 3 → 2 (食事 友達與其它組搭配...)"
          
-      4. [1 Question] **TRANSLATION MATCHING (翻譯與意思比對)**:
-         - Provide a rich Japanese sentence and ask for the most natural, accurate Traditional Chinese translation matching the usage, or vice versa (given a Chinese meaning/scenario, choose the correct Japanese translation).
-         
-      5. [1 Question] **READING COMPREHENSION (短文/對話情境閱讀理解題)**:
-         - Provide a short 2-3 sentence Japanese dialogue, memo, email, or daily scenario paragraph in the 'context' property.
-         - In 'question', ask a comprehension question in Traditional Chinese (e.g. "關於這段話，下列敘述何者正確？", "主角今天打算要做什麼？", or "這封電子郵件的目的是什麼？").
+      4. **Type: "listening"** - LISTENING COMPREHENSION SIMULATION (聽力情境模擬題):
+         - Since this is a visual app, you must simulate a listening question:
+           - In the 'context' property, provide a spoken script or phone call dialogue preceded by a prominent "🎧 [聽力播放模擬]" tag. Example: "🎧 [聽力播放模擬]\n男：明日、一緒に図書館へ行きませんか。\n女：いいですね。何時に会いましょうか。\n男：午前十時はどうですか。\n女：すみません、十時はちょっと用事があります。十一時にしましょう。"
+           - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人明天約幾點見面？" or "女生為什麼十點不能去？").
+           
+      5. **Type: "reading"** - READING COMPREHENSION (閱讀理解題):
+         - In the 'context' property, provide a short 2-3 sentence Japanese dialogue, diary entry, memo, email, or daily scenario paragraph.
+         - In the 'question' property, ask a comprehension question in Traditional Chinese (e.g. "關於這段文章，下列敘述何者正確？", "主角今天打算要去做什麼？", or "這封電子郵件最主要的目的是什麼？").
          
       CRITICAL LANGUAGE & METADATA GUIDELINES:
       - Use ONLY Traditional Chinese (zh-TW, 台灣繁體中文) for all explanations, instructions, options, and translations.
       - **CRITICAL OPTION FORMATTING GUIDELINE**: The 4 elements inside the 'options' array **MUST NOT** contain any alphabetic or numeric prefixes (such as "A. ", "B. ", "C. ", "D. ", "A ", "B ", "C ", "D ", "A、", "B、", "C、", "D、" or "1. ", "2. ", "3. ", "4. "). Return only the **raw content/text** of the option itself. Do not add any alphabetical or numerical labels in front of options, as the client app shuffles the options and renders its own dynamic labels.
       - 'questionReading': ALWAYS provide the full furigana/phonetic reading guide in Hiragana/Katakana for the complete 'question' text.
       - 'questionTranslation': Provide a complete, beautiful, and natural Traditional Chinese translation of the whole 'question' text.
-      - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit of why they are incorrect.
+      - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit or why they are incorrect.
+      - Ensure the 'type' property is correctly set to one of "vocab", "grammar", "ordering", "listening", or "reading" for each question.
       
-      Match the difficulty of the questions to the level of the provided content or inputs. Return exactly 10 questions.
+      Return exactly ${questionCount} questions.
     `,
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
@@ -1216,11 +1235,29 @@ const assistantSchema = {
   required: ["textAnswer", "detectedType", "sources"]
 };
 
-export const analyzeAssistantQuery = async (query: string): Promise<AssistantResponse> => {
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export const analyzeAssistantQuery = async (
+  query: string,
+  history?: ChatMessage[]
+): Promise<AssistantResponse> => {
+  let conversationContext = "";
+  if (history && history.length > 0) {
+    conversationContext = "Here is the conversation history so far for context, leading up to this follow-up query:\n" +
+      history.map(msg => `- ${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`).join('\n') +
+      "\n\nNow, please answer the user's latest follow-up question below while preserving this context.\n";
+  }
+
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
       You are highly styled AI Smart Assistant with the knowledge capabilities of Gemini and Google Search.
+      
+      ${conversationContext}
+      
       Core task: Respond thoroughly to the following user query:
       "${query}"
 
@@ -1231,7 +1268,8 @@ export const analyzeAssistantQuery = async (query: string): Promise<AssistantRes
       4. Set 'detectedType' to 'EXCHANGE_RATE' if they ask about currency conversion, exchange rates, prices in different currencies, etc.
       5. Set 'detectedType' to 'GENERAL_KNOWLEDGE' or 'DAILY_AFFAIRS' for general topics.
       6. Return 2-4 appropriate search citations/references under 'sources' showing where information came from (real-world web domains or helpful URL bookmarks related to the topic).
-      7. Format the textAnswer beautifully and compactly. Ensure paragraphs have clean formatting, and **strictly avoid excessive empty lines, redundant consecutive double-nl \\n\\n, or empty spacing tokens like '\\n2. \\n\\n*'**. Keep list numbering tight without empty lines inside lists. Write naturally as a professional narrator.
+      7. Format the textAnswer beautifully and compactly. Ensure paragraphs have clean formatting, and **strictly avoid excessive empty lines, redundant consecutive double-nl \\n\\n, or empty spacing tokens like '\\n2. \\n\\n*'**. Keep list numbering tight without empty lines inside lists. Write naturally as a professional narrator in beautiful, pure Traditional Chinese (Taiwan).
+      8. CRITICAL: Avoid any corrupt or garbled characters, unescaped quotes inside JSON strings, or raw backslash escape strings. The response must be perfectly readable Traditional Chinese. Do not mix irrelevant language/characters.
 
       If 'detectedType' as 'ROUTE', you MUST populate 'routeMap' with an extremely detailed transit schedule including realistic intermediary stations, methods of transit, walking durations, total costs, etc.
     `,

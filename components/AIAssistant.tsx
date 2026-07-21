@@ -86,6 +86,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
   // Custom interactive state for Currency Realtime Calculator
   const [calcAmount, setCalcAmount] = useState<number>(100);
 
+  // Conversational states for follow-up chat thread
+  const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
+  const [followUpQuery, setFollowUpQuery] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+
   // Initialize and load syncKey
   useEffect(() => {
     let savedSyncKey = localStorage.getItem('mk-nihongo-sync-key');
@@ -166,8 +171,18 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
     setLoading(true);
     setQuery(textToSearch);
     try {
+      // Clear out past thread on starting a brand-new independent query!
+      setConversationHistory([]);
+      setFollowUpQuery('');
+
       const data = await analyzeAssistantQuery(textToSearch);
       setResponse(data);
+
+      // Initialize the conversationHistory thread with this new first round
+      setConversationHistory([
+        { role: 'user', text: textToSearch },
+        { role: 'model', text: data.textAnswer }
+      ]);
       
       // Save local in-memory history list
       setHistoryList(prev => [
@@ -189,6 +204,56 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
       alert('分析與搜尋失敗，請稍後再試！');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFollowUp = async () => {
+    if (!followUpQuery.trim() || followUpLoading) return;
+    setFollowUpLoading(true);
+    const textToSend = followUpQuery.trim();
+    setFollowUpQuery('');
+
+    // Append user's question locally first to show in conversational log instantly
+    const nextHistory = [
+      ...conversationHistory,
+      { role: 'user' as const, text: textToSend }
+    ];
+    setConversationHistory(nextHistory);
+
+    try {
+      // Call with history to maintain contextual flow
+      const data = await analyzeAssistantQuery(textToSend, conversationHistory);
+      
+      // Append the AI's response to the conversation history
+      setConversationHistory(prev => [
+        ...prev,
+        { role: 'model' as const, text: data.textAnswer }
+      ]);
+
+      // Merge results with main card response so visual details continue to render beautifully
+      setResponse(prev => {
+        if (!prev) return data;
+        return {
+          ...prev,
+          textAnswer: data.textAnswer,
+          sources: data.sources && data.sources.length > 0 ? data.sources : prev.sources,
+          routeMap: data.routeMap || prev.routeMap,
+          currencyConverter: data.currencyConverter || prev.currencyConverter,
+          recipeDetail: data.recipeDetail || prev.recipeDetail
+        };
+      });
+
+      if (onXpUpdate) {
+        onXpUpdate(15);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('深度追問解答失敗，請稍後再試！');
+    } finally {
+      setFollowUpLoading(false);
+      setTimeout(() => {
+        document.getElementById('follow-up-section-bottom')?.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
     }
   };
 
@@ -472,6 +537,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
                       onClick={() => {
                         setResponse(item.response);
                         setQuery(item.query);
+                        // Initialize conversation history with loaded item
+                        setConversationHistory([
+                          { role: 'user', text: item.query },
+                          { role: 'model', text: item.response.textAnswer }
+                        ]);
+                        setFollowUpQuery('');
                         setShowHistory(false);
                       }}
                       className="p-3 rounded-xl border border-gray-100 hover:border-indigo-200 bg-gray-50/50 hover:bg-white text-left transition-all flex items-start gap-2.5 group cursor-pointer w-full"
@@ -500,9 +571,29 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
         {/* Query Input Section */}
         <div className="bg-white rounded-3xl border border-gray-150 p-4 sm:p-5 shadow-xs relative overflow-hidden">
           <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between mb-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-wider select-none">
+                  ✨ 開啟全新獨立話題 (避開前文判定)
+                </span>
+              </div>
+              {conversationHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    setQuery('');
+                    setResponse(null);
+                    setConversationHistory([]);
+                  }}
+                  className="text-[10px] text-zinc-400 hover:text-rose-500 font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <span>🔄 清除並重置對話</span>
+                </button>
+              )}
+            </div>
+
             <textarea
-              className="w-full min-h-[190px] sm:min-h-[220px] bg-slate-50/70 border border-slate-100 rounded-2xl pt-6 pb-4 px-5 text-gray-800 text-sm xs:text-base outline-none focus:ring-2 focus:ring-indigo-100 focus:bg-white focus:border-indigo-200 transition-all placeholder:text-gray-400/85 resize-none leading-relaxed"
-              placeholder="輸入任何內容，AI 為您完整解析、問常識、問怎麼去、問食譜作作法、日幣多少或任何大小事..."
+              className="w-full min-h-[190px] sm:min-h-[220px] bg-slate-50/70 border border-slate-100 rounded-2xl pt-6 pb-4 px-5 text-gray-800 text-sm xs:text-base outline-none focus:ring-2 focus:ring-indigo-100 focus:bg-white focus:border-indigo-200 transition-all placeholder:text-gray-400/85 resize-none leading-relaxed font-medium"
+              placeholder="在最上方輸入，會開啟全新獨立的解析（例如：想問特定名勝、別的食譜、或者全新文法常識）..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -529,9 +620,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
                  <Button
                   onClick={() => handleSearch(query)}
                   disabled={loading || !query.trim()}
-                  className="shadow-md h-9 px-4 sm:px-6 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 cursor-pointer rounded-xl w-24 sm:w-auto shrink-0"
+                  className="shadow-md h-9 px-4 sm:px-6 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 cursor-pointer rounded-xl w-44 sm:w-auto shrink-0 transition-all"
                 >
-                  {loading ? '思考中...' : '送出'}
+                  {loading ? '思考中...' : response ? '✨ 發問全新問題 (開啟新主題)' : '開始全新解析'}
                 </Button>
               </div>
             </div>
@@ -897,6 +988,87 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ onBack, onXpUpdate }) 
                     <strong>小貼士：</strong>您可直接利用滑鼠選取或手指觸控選取上方任何文字進行手工複製。若有任何進一步的疑問，歡迎直接在最上方的提問框中輸入後續問題（例如「這道菜可以做成不辣的嗎？」或「附近有什麼地鐵站出口更近？」），AI 萬能助理將隨時順應對話歷史，立即提供連貫的貼心解答！
                   </div>
                 </motion.div>
+
+                {/* Conversational Dialog History Thread (Follow-up messages only, starting from message 3) */}
+                {conversationHistory.length > 2 && (
+                  <div className="space-y-4 pt-4 border-t border-gray-100">
+                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-1.5">
+                      <span>💬</span> 追問對話紀錄
+                    </h4>
+                    <div className="space-y-4">
+                      {conversationHistory.slice(2).map((msg, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`p-4 rounded-2xl border transition-all ${
+                            msg.role === 'user' 
+                              ? 'bg-zinc-50 border-zinc-200 ml-6 text-right' 
+                              : 'bg-indigo-50/20 border-indigo-100 mr-6 text-left'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                            <span className={`text-[10px] font-black uppercase tracking-wider ${
+                              msg.role === 'user' ? 'text-zinc-500' : 'text-indigo-600'
+                            }`}>
+                              {msg.role === 'user' ? '👤 追問問題' : '🤖 AI 深度解答'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-700 leading-relaxed text-left">
+                            {msg.role === 'user' ? (
+                              <p className="font-medium">{msg.text}</p>
+                            ) : (
+                              renderMarkdown(msg.text)
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Follow-up / Reply Input Box */}
+                <div id="follow-up-section-bottom" className="bg-gradient-to-br from-indigo-50/20 to-indigo-50/40 rounded-3xl border border-indigo-100 p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-black">💬</span>
+                      <h4 className="text-sm font-black text-indigo-950">針對此主題繼續追問</h4>
+                    </div>
+                    <span className="text-[10px] text-indigo-500 font-extrabold bg-white px-2 py-0.5 rounded-md border border-indigo-100">
+                      承接上文脈絡 (不中斷)
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <textarea
+                      className="flex-1 bg-white border border-indigo-100 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-2xl p-4 text-gray-850 text-xs sm:text-sm outline-none resize-none h-14 sm:h-16 leading-relaxed transition-all placeholder:text-gray-400 font-medium"
+                      placeholder="輸入追問內容... (例如：這道菜可以做成不辣的嗎？如何換其他配料？)"
+                      value={followUpQuery}
+                      onChange={(e) => setFollowUpQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.ctrlKey) {
+                          handleFollowUp();
+                        }
+                      }}
+                      disabled={followUpLoading}
+                    />
+                    <button
+                      onClick={handleFollowUp}
+                      disabled={followUpLoading || !followUpQuery.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm px-4 rounded-2xl transition-all shadow-sm flex flex-col items-center justify-center gap-1 shrink-0 cursor-pointer w-20 sm:w-24"
+                    >
+                      {followUpLoading ? (
+                        <span className="text-[10px] animate-pulse">解答中...</span>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          <span className="text-xs">送出追問</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-medium">
+                    💡 提示：使用此「送出追問」會連同前文對話一併進行聯想解答。若想問完全無關的新問題，請滑回最上方「開啟全新獨立話題」發問。
+                  </p>
+                </div>
 
               </div>
             </motion.div>
