@@ -758,21 +758,33 @@ export const generateQuizFromContent = async (
       2. **Type: "grammar"** - GRAMMAR, CONJUGATION & PARTICLES (文法、接續與助詞填空題):
          - Test specific JLPT grammar points (e.g., ～ている, ～ほうがいい, ～なければならない) or particles (は, が, を, に, で, と, も, から, まで) in clear blanks "___".
          - Make sure the question prompts ask clearly for the correct particle or conjugation form that makes the sentence grammatically complete and natural.
+         - All distractor options (B, C, D) must have distinct, identifiable grammatical reasons for being incorrect (e.g., mismatched particle, impossible verb inflection, unnatural collocation).
          
-      3. **Type: "ordering"** - SENTENCE ORDERING & ARRANGEMENT (句子重組與拼湊順序題 - 並び替え):
-         - Follow this strict formatting structure:
-           - The 'question' property MUST specify a template sentence with four numbered underlines like this: "昨日は ①＿ ②＿ ③★＿ ④＿ でした。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
-           - Below that template, list the 4 unordered word/phrase segments clearly using brackets (e.g. "【重組單字區：1. 友達と / 2. 楽しく / 3. 賑やかな / 4. 食事】").
+      3. **Type: "ordering"** - SENTENCE ORDERING & ARRANGEMENT (句子重組與星號題 - 並び替え):
+         - 【JLPT 題目生成與審查規範 (最高規格絕對約束)】:
+           1. **唯一解約束（絕對要求）**:
+              - 重組題（星號題）所給的 4 個選項，在語意與文法組合上必須為「全宇宙唯一合法順序」！在 4! = 24 種排列中，除了正解之外，其餘 23 種組合在文法接續或語境邏輯上都必須完全無法成立。
+              - **嚴禁出現對稱句型而無前文的情境**：例如「AよりB」可與「BよりA」任意互換（如題目「私は ①_ ②_ ③★_ ④_ いいです」配選項「紅茶 / コーヒー / のほうが / より」，此時「コーヒーより紅茶」與「紅茶よりコーヒー」皆完全合法，造成雙重解或答案模糊，此類題目絕對嚴格禁止！）。
+              - **比較級與對立句型強制給出明確語境**：若使用比較級（如 ～より～のほうが）或對立句型，題幹開頭**必須給出明確原因、先決條件或語境**（例如：「コーヒーが苦手なので、私は ①＿ ②＿ ③★＿ ④＿ いいです。」），以語境鎖定唯一的主賓順序，徹底杜絕多解！
+           2. **標點與接續嚴謹度**:
+              - 選項單字（重組單字區之 4 個詞段）**絕對不得自帶結尾句號（。）**或題幹中已有的助詞或標點。
+              - 句型接續（動詞連用形、て形、名詞修飾、副詞修飾、格助詞搭配）必須僅有一種在語法上成立的排列方式。
+           3. **干擾項邏輯**:
+              - 錯誤選項（B、C、D）必須為明顯的文法錯誤或不自然接續，不得僅依靠前後主詞或名詞對調來充當選項。
+         - Follow this strict formatting structure for ordering questions:
+           - The 'question' property MUST specify a template sentence with four numbered underlines like this: "（語境前文，如：コーヒーが苦手なので、）私は ①＿ ②＿ ③★＿ ④＿ いいです。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
+           - Below that template, list the 4 unordered word/phrase segments clearly using brackets (e.g. "【重組單字區：1. 紅茶 / 2. コーヒー / 3. のほうが / 4. より】").
            - Below that list, write the clear instruction: "請重組句子，並選出 ★ (第三個空格) 處正確的重組單字：".
-           - To make selection absolutely seamless and clear, each of the 4 elements in 'options' should represent THE ENTIRE ORDER combination showing BOTH the number sequence and the FULL resulting sentence. 
-             Example Options (Notice standard arrows):
-             - "1 → 4 → 3 → 2 (友達と 食事 賑やかな 楽しく)"
-             - "1 → 2 → 4 → 3 (友達與其它組搭配...)"
-             - "2 → 1 → 3 → 4 (楽しく 友達と 賑やかな 食事)"
-             - "4 → 1 → 3 → 2 (食事 友達與其它組搭配...)"
-         
+           - 'options': Provide the 4 candidate words from the 【重組單字區】 without alphabetical or numerical prefixes (e.g. ["紅茶", "コーヒー", "のほうが", "より"]). 'correctAnswerIndex' must accurately point to the segment that fits into the ★ (第三個空格) position! (Alternatively, if full sequence paths are provided, they must be formatted as "2 → 4 → 1 → 3 (コーヒーより紅茶のほうが)" where incorrect paths contain obvious grammatical connection errors).
+           - 'explanation': MUST provide:
+             1. 完整正確句子 (e.g. 「コーヒーが苦手なので、私はコーヒーより紅茶のほうがいいです。」)
+             2. 正確排列順序 (e.g. 「2 → 4 → 1 → 3」)
+             3. ★ 處單字明確指認 (e.g. 「第 3 個空格（★）放入的是『1. 紅茶』」)
+             4. 詳細文法剖析：解釋接續關係（「名詞＋より＋名詞＋のほうが＋形容詞」句型，因前文提到不喝咖啡，因此鎖定咖啡比紅茶），並逐一指出為何其他順序無法成立。
+          
       4. **Type: "listening"** - LISTENING COMPREHENSION SIMULATION (聽力情境模擬題):
          - Since this is a visual app, you must simulate a listening question:
+            - CRITICAL SSML FORMATTING FOR MALE VOICE: For any male speaker lines (男聲對話, e.g. 男：, 男性：), you MUST wrap the spoken text in SSML tags: \`<prosody volume="+4dB" pitch="+15%">男聲台詞內容</prosody>\`. Female lines remain standard without SSML tags.
            - In the 'context' property, provide a spoken script or phone call dialogue preceded by a prominent "🎧 [聽力播放模擬]" tag. Example: "🎧 [聽力播放模擬]\n男：明日、一緒に図書館へ行きませんか。\n女：いいですね。何時に会いましょうか。\n男：午前十時はどうですか。\n女：すみません、十時はちょっと用事があります。十一時にしましょう。"
            - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人明天約幾點見面？" or "女生為什麼十點不能去？").
            
@@ -783,6 +795,7 @@ export const generateQuizFromContent = async (
       CRITICAL LANGUAGE & METADATA GUIDELINES:
       - Use ONLY Traditional Chinese (zh-TW, 台灣繁體中文) for all explanations, instructions, options, and translations.
       - **CRITICAL OPTION FORMATTING GUIDELINE**: The 4 elements inside the 'options' array **MUST NOT** contain any alphabetic or numeric prefixes (such as "A. ", "B. ", "C. ", "D. ", "A ", "B ", "C ", "D ", "A、", "B、", "C、", "D、" or "1. ", "2. ", "3. ", "4. "). Return only the **raw content/text** of the option itself. Do not add any alphabetical or numerical labels in front of options, as the client app shuffles the options and renders its own dynamic labels.
+      - **NO TRAILING PERIODS IN OPTIONS**: Segments inside 'options' must not end with Japanese period "。" or English period ".".
       - 'questionReading': ALWAYS provide the full furigana/phonetic reading guide in Hiragana/Katakana for the complete 'question' text.
       - 'questionTranslation': Provide a complete, beautiful, and natural Traditional Chinese translation of the whole 'question' text.
       - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit or why they are incorrect.
@@ -1004,7 +1017,7 @@ const listeningSchema = {
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: `Generate a JLPT ${level} listening practice material. Style: NHK News or short interesting article. Break it into natural sentences/segments. Traditional Chinese translation.`,
+    contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL SSML FORMATTING FOR MALE VOICE: For any male dialogue lines (男聲對話), you MUST format the spoken text inside SSML tags: <prosody volume="+4dB" pitch="+15%">男聲台詞內容</prosody>. Female voice lines remain standard without SSML tags. Break it into natural sentences/segments. Traditional Chinese translation.`,
     config: { responseMimeType: "application/json", responseSchema: listeningSchema },
   });
   return { ...JSON.parse(response.text), level };
@@ -1276,6 +1289,7 @@ export const analyzeAssistantQuery = async (
     config: {
       responseMimeType: "application/json",
       responseSchema: assistantSchema,
+      tools: [{ googleSearch: {} }]
     }
   });
 

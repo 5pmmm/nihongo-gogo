@@ -14,7 +14,11 @@ const cleanOptionText = (text: string): string => {
   cleaned = cleaned.replace(/^[A-Da-d](?:\s*[\.\:\,）\)\、\s．：，])\s*/, '');
   
   // Clean numeric prefixes like "1. ", "1、", "1) " but NOT followed by an arrow like "→" or "->"
-  cleaned = cleaned.replace(/^[1-4](?:\s*[\.\:\,）\)\、．：，])\s*/, '');
+  if (!cleaned.includes('→') && !cleaned.includes('->')) {
+    cleaned = cleaned.replace(/^[1-4](?:\s*[\.\:\,）\)\、．：，])\s*/, '');
+    // Clean trailing sentence periods or commas on single option tokens
+    cleaned = cleaned.replace(/[。\.\,\，]+$/, '');
+  }
   
   return cleaned.trim();
 };
@@ -223,12 +227,13 @@ export const Quiz: React.FC<QuizProps> = ({
       const trimmed = line.trim();
       if (!trimmed) continue;
 
+      const hasSsmlMale = trimmed.includes('<prosody') || trimmed.includes('volume="+4dB"');
       // Match common speaker patterns (e.g. "男：", "男性：", "女：", "女性：", "佐藤：", "鈴木：", "A：", "B：")
       const maleMatch = trimmed.match(/^(?:男|男性|男A|男B|佐藤|鈴木|田中|山田|先生|男の子)(?:：|:| :)/);
       const femaleMatch = trimmed.match(/^(?:女|女性|女A|女B|美咲|さくら|花子|お母さん|女の子)(?:：|:| :)/);
 
-      if (maleMatch) {
-        const dialogueText = trimmed.substring(maleMatch[0].length).trim();
+      if (maleMatch || hasSsmlMale) {
+        const dialogueText = maleMatch ? trimmed.substring(maleMatch[0].length).trim() : trimmed;
         result.push({ speaker: 'male', text: dialogueText });
       } else if (femaleMatch) {
         const dialogueText = trimmed.substring(femaleMatch[0].length).trim();
@@ -239,14 +244,14 @@ export const Quiz: React.FC<QuizProps> = ({
         if (generalMatch) {
           const name = generalMatch[1].trim();
           const dialogueText = generalMatch[2].trim();
-          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name);
+          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name) || hasSsmlMale;
           const isFemale = /女|美咲|さくら|花子|お母さん|女性/.test(name);
           result.push({ 
             speaker: isMale ? 'male' : (isFemale ? 'female' : 'default'), 
             text: dialogueText 
           });
         } else {
-          result.push({ speaker: 'default', text: trimmed });
+          result.push({ speaker: hasSsmlMale ? 'male' : 'default', text: trimmed });
         }
       }
     }
@@ -282,17 +287,19 @@ export const Quiz: React.FC<QuizProps> = ({
       }
 
       const line = lines[currentLineIndex];
-      const utterance = new SpeechSynthesisUtterance(line.text);
+      // Clean SSML / XML tags for Web SpeechSynthesis so browser utters clean text
+      const speechText = line.text.replace(/<[^>]*>/g, '').trim();
+      const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.lang = 'ja-JP';
       utterance.volume = 1.0;
 
       // Assign voice and optimize sound clarity/brightness
       if (line.speaker === 'male' && male) {
         utterance.voice = male;
-        // Raise pitch to 1.28 to shift vocal resonance higher, completely removing muffled/muddy chest tones and adding brightness
-        utterance.pitch = 1.28;
-        // Increase the rate multiplier to 1.12 to make articulation crisper, sharper, and less sluggish
-        utterance.rate = speed * 1.12;
+        // Optimize male voice clarity: Pitch 1.15 shifts vocal resonance higher to remove muffled/muddy chest tones.
+        // Rate 0.98 keeps speech rate moderate ("語速適中") and highly legible, making articulation clean and crisp.
+        utterance.pitch = 1.15;
+        utterance.rate = speed * 0.98;
       } else if (line.speaker === 'female' && female) {
         utterance.voice = female;
         utterance.pitch = 1.0;
