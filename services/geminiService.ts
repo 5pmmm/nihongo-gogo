@@ -784,9 +784,15 @@ export const generateQuizFromContent = async (
           
       4. **Type: "listening"** - LISTENING COMPREHENSION SIMULATION (聽力情境模擬題):
          - Since this is a visual app, you must simulate a listening question:
-            - CRITICAL SSML FORMATTING FOR MALE VOICE: For any male speaker lines (男聲對話, e.g. 男：, 男性：), you MUST wrap the spoken text in SSML tags: \`<prosody volume="+4dB" pitch="+15%">男聲台詞內容</prosody>\`. Female lines remain standard without SSML tags.
-           - In the 'context' property, provide a spoken script or phone call dialogue preceded by a prominent "🎧 [聽力播放模擬]" tag. Example: "🎧 [聽力播放模擬]\n男：明日、一緒に図書館へ行きませんか。\n女：いいですね。何時に会いましょうか。\n男：午前十時はどうですか。\n女：すみません、十時はちょっと用事があります。十一時にしましょう。"
-           - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人明天約幾點見面？" or "女生為什麼十點不能去？").
+           - **CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS (聽力原文純淨化 - 絕對禁止任何標籤)**:
+             - The generated 'context' (spoken script / 對話原文) **MUST NOT contain any XML, HTML, or SSML tags** (strictly NO <prosody>, NO </prosody>, NO <voice>, NO XML tags whatsoever).
+             - The transcript must contain ONLY pure, clean Japanese text with speaker markers (e.g. "女：", "男：").
+             - Example format:
+               "🎧 [聽力播放模擬]
+女：昨日、大切な書類をなくしちゃって本当に焦ったよ。
+男：えっ、本当？見つかったの？
+女：うん、同僚の机の上に置き忘れていただけだったの。"
+           - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人在對話中討論了什麼？" or "女生最後在哪裡找到重要文件？").
            
       5. **Type: "reading"** - READING COMPREHENSION (閱讀理解題):
          - In the 'context' property, provide a short 2-3 sentence Japanese dialogue, diary entry, memo, email, or daily scenario paragraph.
@@ -1017,7 +1023,7 @@ const listeningSchema = {
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL SSML FORMATTING FOR MALE VOICE: For any male dialogue lines (男聲對話), you MUST format the spoken text inside SSML tags: <prosody volume="+4dB" pitch="+15%">男聲台詞內容</prosody>. Female voice lines remain standard without SSML tags. Break it into natural sentences/segments. Traditional Chinese translation.`,
+    contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS: The dialogue transcript must NOT contain any XML/HTML/SSML tags (strictly NO <prosody>, NO </prosody>). Use only pure speaker lines like "女：..." and "男：...". Break it into natural sentences/segments. Traditional Chinese translation.`,
     config: { responseMimeType: "application/json", responseSchema: listeningSchema },
   });
   return { ...JSON.parse(response.text), level };
