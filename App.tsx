@@ -475,13 +475,26 @@ function App() {
     
     try {
       if (learningMethod === 'QUIZ') {
+         const isArticleQuiz = inputMode === 'READING';
+         if (isArticleQuiz && !input.trim()) {
+           alert("請先貼上欲進行測驗的日文文章內容！");
+           setLoading(false);
+           return;
+         }
+
+         const articleText = isArticleQuiz ? input.trim() : undefined;
+         const prompt = isArticleQuiz 
+           ? `請嚴格依據以下使用者貼出的日文文章深度出題（涵蓋單字填空/讀音拼音、文法接續、句子重組、聽力模擬、閱讀理解）：\n${input.trim()}`
+           : (input.trim() || "請為我生成一套日文綜合練習測驗。");
+
          setQuizConfig({ 
             sourceWords: [], 
             sourceGrammar: [], 
-            dateLabel: input.trim() ? "AI 定製練習" : "日文綜合練習測驗",
-            specificPrompt: input.trim() || "請為我生成一套日文綜合練習測驗。",
+            dateLabel: isArticleQuiz ? "文章專屬綜合測驗" : (input.trim() ? "AI 定製練習" : "日文綜合練習測驗"),
+            specificPrompt: prompt,
             questionCount: quizQuestionCount,
-            jlptLevel: undefined
+            jlptLevel: isArticleQuiz ? undefined : selectedLevel,
+            sourceArticle: articleText
          });
          
          const today = new Date().toISOString().split('T')[0];
@@ -675,14 +688,48 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Custom prompt description */}
+                    {/* Custom prompt or article input */}
                     <div className="space-y-2">
-                      <p className="font-extrabold text-zinc-800 text-xs sm:text-sm flex items-center gap-1.5">
-                        <span>✍️</span> 2. 指定主題或自訂單字範圍 (選填)：
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="font-extrabold text-zinc-800 text-xs sm:text-sm flex items-center gap-1.5">
+                          {inputMode === 'READING' ? (
+                            <>
+                              <span>📰</span> 2. 貼上欲測驗的日文文章內容 (AI 依此出題)：
+                            </>
+                          ) : inputMode === 'WORD' ? (
+                            <>
+                              <span>✍️</span> 2. 指定單字範圍或主題 (選填)：
+                            </>
+                          ) : (
+                            <>
+                              <span>✍️</span> 2. 指定文法範圍或主題 (選填)：
+                            </>
+                          )}
+                        </p>
+                        {inputMode === 'READING' && (
+                          <span className="text-[10px] sm:text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            必填文章
+                          </span>
+                        )}
+                      </div>
+                      
+                      {inputMode === 'READING' && (
+                        <p className="text-[11px] sm:text-xs text-zinc-500 font-medium">
+                          貼上日語新聞、故事短文或閱讀段落，AI 將深入萃取文中字詞，全面生成包含「單字填空/讀音拼音、文法接續、句子重組、聽力情境模擬、閱讀理解」的客製化題目！
+                        </p>
+                      )}
+
                       <textarea
-                        className="w-full p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl outline-none text-sm sm:text-base text-zinc-900 font-bold h-24 sm:h-28 shadow-xs resize-none placeholder-zinc-400 focus:border-zinc-400 transition-all"
-                        placeholder="例如：輸入你想考的日文單字（以空格或逗號分隔）、特定文法主題、或情境（旅行、商務等）。若留空，AI 將隨機為您出題！" 
+                        className={`w-full p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl outline-none text-sm sm:text-base text-zinc-900 font-bold shadow-xs resize-none placeholder-zinc-400 focus:border-zinc-400 transition-all ${
+                          inputMode === 'READING' ? 'h-36 sm:h-52' : 'h-24 sm:h-28'
+                        }`}
+                        placeholder={
+                          inputMode === 'READING'
+                            ? "請在此貼上欲測驗的日文文章內容（例如 NHK 新聞、小說故事、日語文章等）...\n\nAI 將依據此文章內容深度命題：\n• 單字填空與讀音拼音\n• 文法、助詞與接續\n• 句子重組 (並び替え)\n• 聽力情境模擬與男女聲朗讀\n• 文章閱讀理解"
+                            : inputMode === 'WORD'
+                            ? "例如：輸入想測驗的單字（以空格或逗號分隔，如「約束, 準備, 連絡」）。若留空，AI 將依目前設定隨機出題！"
+                            : "例如：輸入想測驗的文法句型（如「～てもいい, ～てはいけない, ～ほうがいい」）。若留空，AI 將隨機出題！"
+                        }
                         value={input} 
                         onChange={(e) => setInput(e.target.value)}
                       />
@@ -700,7 +747,7 @@ function App() {
                   {learningMethod !== 'RECOMMEND' && (
                     <Button 
                       onClick={() => setInput('')} 
-                      disabled={loading || (!input && learningMethod !== 'QUIZ')} 
+                      disabled={loading || !input} 
                       variant="secondary"
                       size={loading ? 'sm' : 'md'} 
                       className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-rose-100 text-rose-500 hover:text-rose-700 hover:bg-rose-50/50"
@@ -715,7 +762,7 @@ function App() {
                     size={loading ? 'sm' : 'md'} 
                     className="px-6 sm:px-12 py-2 sm:py-4.5 text-xs xs:text-sm sm:text-lg border-zinc-200"
                   >
-                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : learningMethod === 'QUIZ' ? '開始測驗' : '開始解析'}
+                    {loading ? 'AI 思考中...' : learningMethod === 'RECOMMEND' ? '開始推薦' : learningMethod === 'QUIZ' ? (inputMode === 'READING' ? '開始文章測驗' : '開始測驗') : '開始解析'}
                   </Button>
                 </div>
               </div>

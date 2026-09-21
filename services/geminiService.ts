@@ -730,9 +730,18 @@ export const generateQuizFromContent = async (
   grammar: GrammarDefinition[], 
   specificPrompt?: string, 
   questionCount: number = 10,
-  jlptLevel?: string
+  jlptLevel?: string,
+  sourceArticle?: string
 ): Promise<QuizQuestion[]> => {
-  const context = JSON.stringify({ words, grammar, rawInput: specificPrompt, targetLevel: jlptLevel });
+  const isArticleQuiz = Boolean(sourceArticle?.trim());
+  const context = JSON.stringify({ 
+    words, 
+    grammar, 
+    rawInput: specificPrompt, 
+    targetLevel: jlptLevel,
+    sourceArticle: sourceArticle?.trim() || undefined,
+    isArticleQuiz
+  });
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
@@ -740,12 +749,32 @@ export const generateQuizFromContent = async (
       
       Your goal is to generate a highly professional, diverse, and engaging Japanese quiz containing EXACTLY ${questionCount} questions.
       
-      CRITICAL FOCUS ON USER CUSTOM WORDS AND INPUT:
+      CRITICAL FOCUS ON USER ARTICLE AND CUSTOM INPUT:
+      - **ARTICLE-BASED QUIZ MODE (使用者貼出文章出題模式 - 依文章深度命題)**:
+        If 'sourceArticle' is provided (or if 'rawInput' contains a user-pasted Japanese article / reading text):
+        - You MUST strictly build the entire quiz directly based on the provided article!
+        - Extract authentic learning points across the whole article to test comprehensive understanding:
+          1. **vocab**: Extract vocabulary, kanji, and loanwords used in the article. Test kanji readings (拼音/假名標音), kanji writing from kana, loanword spelling, or target word contextual usage/fill-in-the-blank.
+          2. **grammar**: Select key grammar patterns, particles (は, が, を, に, で, と, から, まで, etc.), or verb/adjective conjugations (て形, ない形, 可能形, 受身形, 使役形, etc.) that appear in the article. Test them with clear blanks "___".
+          3. **ordering**: Pick an important clause or sentence structure from the article. Rearrange it into 4 segments following the strict 4-slot structure (①＿ ②＿ ③★＿ ④＿), ensuring 100% unique solution order with necessary preceding context.
+          4. **listening**: Construct a vivid 2-4 line Japanese spoken dialogue between two speakers (女： / 男：) discussing, reacting to, or role-playing the topic/events described in the article.
+          5. **reading**: Ask in-depth comprehension, detail, reason, or main idea questions directly based on the user's article.
+
       - If 'rawInput' is provided (especially when containing Japanese words, vocabularies, sentences, or specific grammar topics input by the user) OR if 'words' / 'grammar' arrays are not empty, you MUST STRICTLY use these words and topics as the core subjects of the generated questions!
-      - For instance, if the user entered words like "猫, 食べる, 綺麗", then your vocabulary, grammar, reading, and listening questions MUST be constructed directly around these words, testing their meaning, reading, writing, or usage in context.
       - DO NOT ignore user-entered words/topics or replace them with arbitrary, unrelated JLPT presets. Under all circumstances, the custom user input is the absolute HIGHEST priority constraint.
-      - If and only if no specific words or 'rawInput' are provided and 'targetLevel' is set, match the general difficulty level of JLPT ${jlptLevel}.
+      - If and only if no specific words, article, or 'rawInput' are provided and 'targetLevel' is set, match the general difficulty level of JLPT ${jlptLevel}.
       - Otherwise, generate a well-balanced, general Japanese practice test matching the provided content.
+
+      **CRITICAL ANTI-SPOILER MANDATE (題目上方絕對禁止洩漏答案 - 嚴格維護測驗公平性)**:
+      - For "vocab", "grammar", and "ordering" questions:
+        - The 'context' property MUST be an EMPTY STRING ("") or null!
+        - NEVER output the unblanked target sentence, source paragraph, or the solution into the 'context' property!
+        - Doing so causes the application to display the complete sentence in a prompt/hint box right above the question, which leaks the answer immediately (e.g., student sees the missing word or the exact order of the sentence directly in the box above the question).
+        - All sentences with blanks (___) or numbered slots (①＿ ②＿ ③★＿ ④＿) MUST be placed strictly inside the 'question' property.
+      - For "reading" questions:
+        - The 'context' property MUST contain the article passage or relevant paragraphs for the user to read and answer the comprehension question.
+      - For "listening" questions:
+        - The 'context' property MUST contain the clean spoken dialogue script (without any XML/SSML tags) for the audio synthesizer to play, while remaining hidden from the user until revealed.
       
       You must distribute the requested ${questionCount} questions proportionally across the following 5 distinct types (aiming for roughly equal distribution, e.g., if count is 5, generate 1 of each; if count is 10, generate 2 of each; if count is 15, generate 3 of each; if count is 20, generate 4 of each):
       

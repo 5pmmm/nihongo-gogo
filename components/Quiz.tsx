@@ -6,6 +6,14 @@ import { WordDefinition, GrammarDefinition, QuizQuestion } from '../types';
 import { Loader } from './Loader';
 import { Button } from './Button';
 
+const cleanTranscriptText = (text: string): string => {
+  if (!text) return '';
+  return text
+    .replace(/<[^>]*>/g, '') // Strip any residual HTML/XML/SSML tags
+    .replace(/🎧\s*\[.*?\]/g, '') // Strip headers like 🎧 [聽力播放模擬]
+    .trim();
+};
+
 const cleanOptionText = (text: string): string => {
   if (!text) return '';
   let cleaned = text.trim();
@@ -14,7 +22,11 @@ const cleanOptionText = (text: string): string => {
   cleaned = cleaned.replace(/^[A-Da-d](?:\s*[\.\:\,）\)\、\s．：，])\s*/, '');
   
   // Clean numeric prefixes like "1. ", "1、", "1) " but NOT followed by an arrow like "→" or "->"
-  cleaned = cleaned.replace(/^[1-4](?:\s*[\.\:\,）\)\、．：，])\s*/, '');
+  if (!cleaned.includes('→') && !cleaned.includes('->')) {
+    cleaned = cleaned.replace(/^[1-4](?:\s*[\.\:\,）\)\、．：，])\s*/, '');
+    // Clean trailing sentence periods or commas on single option tokens
+    cleaned = cleaned.replace(/[。\.\,\，]+$/, '');
+  }
   
   return cleaned.trim();
 };
@@ -85,6 +97,7 @@ interface QuizProps {
   jlptLevel?: string; // Optional target JLPT Level
   onExit: () => void;
   title?: string;
+  sourceArticle?: string; // User-provided article text
 }
 
 export const Quiz: React.FC<QuizProps> = ({ 
@@ -94,7 +107,8 @@ export const Quiz: React.FC<QuizProps> = ({
   questionCount, 
   jlptLevel, 
   onExit, 
-  title 
+  title,
+  sourceArticle
 }) => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,11 +116,12 @@ export const Quiz: React.FC<QuizProps> = ({
   const [userAnswers, setUserAnswers] = useState<(number | null)[]>([]);
   const [showResult, setShowResult] = useState(false);
   const [selectedReviewIndex, setSelectedReviewIndex] = useState<number | null>(null);
+  const [showArticleModal, setShowArticleModal] = useState(false);
 
   // Audio Playback States for Listening Questions
   const [isPlaying, setIsPlaying] = useState(false);
   const [showScript, setShowScript] = useState(false);
-  const [speed, setSpeed] = useState(1.0);
+  const [speed, setSpeed] = useState(0.95);
 
   // Keep track of current playing session to avoid race conditions with cancels/skips
   const playSessionRef = useRef<number>(0);
@@ -152,8 +167,8 @@ export const Quiz: React.FC<QuizProps> = ({
     // High quality Microsoft online voices: Nanami (female), Keita (male)
     // macOS high quality voices: Kyoko (female), Otoya (male)
     // Google voices: "Google 日本語"
-    const femaleKeywords = ['nanami', 'kyoko', 'haruka', 'shiori', 'mayu', 'female', 'siri', 'ichona'];
-    const maleKeywords = ['keita', 'otoya', 'ichiro', 'naofumi', 'kazuya', 'yuto', 'takumi', 'male', 'koutarou'];
+    const femaleKeywords = ['neural2-a', 'neural2-b', 'wavenet-a', 'wavenet-b', 'nanami', 'kyoko', 'haruka', 'shiori', 'mayu', 'female', 'siri', 'ichona'];
+    const maleKeywords = ['neural2-c', 'neural2-d', 'wavenet-c', 'wavenet-d', 'keita', 'otoya', 'ichiro', 'naofumi', 'kazuya', 'yuto', 'takumi', 'male', 'koutarou'];
 
     const findBestVoice = (keywords: string[], preferredGender?: 'male' | 'female') => {
       // 1. Natural / Online voices
@@ -223,12 +238,13 @@ export const Quiz: React.FC<QuizProps> = ({
       const trimmed = line.trim();
       if (!trimmed) continue;
 
+      const hasSsmlMale = trimmed.includes('<prosody') || trimmed.includes('volume="+4dB"');
       // Match common speaker patterns (e.g. "男：", "男性：", "女：", "女性：", "佐藤：", "鈴木：", "A：", "B：")
       const maleMatch = trimmed.match(/^(?:男|男性|男A|男B|佐藤|鈴木|田中|山田|先生|男の子)(?:：|:| :)/);
       const femaleMatch = trimmed.match(/^(?:女|女性|女A|女B|美咲|さくら|花子|お母さん|女の子)(?:：|:| :)/);
 
-      if (maleMatch) {
-        const dialogueText = trimmed.substring(maleMatch[0].length).trim();
+      if (maleMatch || hasSsmlMale) {
+        const dialogueText = maleMatch ? trimmed.substring(maleMatch[0].length).trim() : trimmed;
         result.push({ speaker: 'male', text: dialogueText });
       } else if (femaleMatch) {
         const dialogueText = trimmed.substring(femaleMatch[0].length).trim();
@@ -239,14 +255,14 @@ export const Quiz: React.FC<QuizProps> = ({
         if (generalMatch) {
           const name = generalMatch[1].trim();
           const dialogueText = generalMatch[2].trim();
-          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name);
+          const isMale = /男|佐藤|鈴木|先生|お父さん|課長|部長/.test(name) || hasSsmlMale;
           const isFemale = /女|美咲|さくら|花子|お母さん|女性/.test(name);
           result.push({ 
             speaker: isMale ? 'male' : (isFemale ? 'female' : 'default'), 
             text: dialogueText 
           });
         } else {
-          result.push({ speaker: 'default', text: trimmed });
+          result.push({ speaker: hasSsmlMale ? 'male' : 'default', text: trimmed });
         }
       }
     }
@@ -282,25 +298,30 @@ export const Quiz: React.FC<QuizProps> = ({
       }
 
       const line = lines[currentLineIndex];
-      const utterance = new SpeechSynthesisUtterance(line.text);
+      // Clean SSML / XML tags for Web SpeechSynthesis so browser utters clean text
+      const speechText = line.text.replace(/<[^>]*>/g, '').trim();
+      const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.lang = 'ja-JP';
       utterance.volume = 1.0;
 
-      // Assign voice and optimize sound clarity/brightness
+      // Assign voice and enforce character speech parameters:
+      // Male: rate = 0.9, volume = 1.0, pitch = 1.05
+      // Female: rate = 0.95, volume = 0.9, pitch = 1.0
       if (line.speaker === 'male' && male) {
         utterance.voice = male;
-        // Optimize male voice clarity: Pitch 1.15 shifts vocal resonance higher to remove muffled/muddy chest tones.
-        // Rate 0.98 keeps speech rate moderate ("語速適中") and highly legible, making articulation clean and crisp.
-        utterance.pitch = 1.15;
-        utterance.rate = speed * 0.98;
+        utterance.rate = speed * 0.9;
+        utterance.volume = 1.0;
+        utterance.pitch = 1.05;
       } else if (line.speaker === 'female' && female) {
         utterance.voice = female;
+        utterance.rate = speed * 0.95;
+        utterance.volume = 0.9;
         utterance.pitch = 1.0;
-        utterance.rate = speed;
-      } else if (defaultVoice) {
-        utterance.voice = defaultVoice;
+      } else {
+        if (defaultVoice) utterance.voice = defaultVoice;
+        utterance.rate = speed * 0.95;
+        utterance.volume = 0.95;
         utterance.pitch = 1.0;
-        utterance.rate = speed;
       }
 
       utterance.onend = () => {
@@ -351,12 +372,22 @@ export const Quiz: React.FC<QuizProps> = ({
           sourceGrammar, 
           specificPrompt, 
           questionCount || 10, 
-          jlptLevel
+          jlptLevel,
+          sourceArticle
         );
         
-        // Shuffle the options of each question to make sure options/correct index are distributed randomly
+        // Clean context and shuffle options of each question
         const shuffledQuestions = qs.map(q => {
-          if (!q.options || q.options.length <= 1) return q;
+          let cleanedContext = q.context ? cleanTranscriptText(q.context) : q.context;
+          // CRITICAL ANTI-SPOILER: For vocab, grammar, and ordering questions, NEVER retain or show
+          // the completed sentence/source text in context, as it reveals the answer right above the question.
+          if (q.type === 'vocab' || q.type === 'grammar' || q.type === 'ordering') {
+            cleanedContext = '';
+          }
+
+          if (!q.options || q.options.length <= 1) {
+            return { ...q, context: cleanedContext };
+          }
 
           // Track original position of each option
           const indexedOptions = q.options.map((opt, index) => ({ opt: cleanOptionText(opt), index }));
@@ -372,6 +403,7 @@ export const Quiz: React.FC<QuizProps> = ({
 
           return {
             ...q,
+            context: cleanedContext,
             options: shuffledOptions,
             correctAnswerIndex: newCorrectIndex !== -1 ? newCorrectIndex : q.correctAnswerIndex
           };
@@ -386,7 +418,7 @@ export const Quiz: React.FC<QuizProps> = ({
       }
     };
     loadQuiz();
-  }, [sourceWords, sourceGrammar, specificPrompt, questionCount, jlptLevel]);
+  }, [sourceWords, sourceGrammar, specificPrompt, questionCount, jlptLevel, sourceArticle]);
 
   const handleAnswer = (optionIndex: number) => {
     if (userAnswers[currentIndex] !== null) return;
@@ -528,14 +560,14 @@ export const Quiz: React.FC<QuizProps> = ({
                             <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">聽力播放與文字回顧</span>
                             <div className="flex gap-1.5 items-center">
                               <span className="text-[9px] text-zinc-400 font-bold">語速</span>
-                              {[0.8, 1.0, 1.2].map((s) => (
+                              {[0.8, 0.95, 1.15].map((s) => (
                                 <button
                                   key={s}
                                   type="button"
                                   onClick={() => setSpeed(s)}
                                   className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${speed === s ? 'bg-zinc-900 text-white shadow-xs' : 'bg-white text-zinc-500 border border-zinc-150'}`}
                                 >
-                                  {s === 1.0 ? '標準' : s === 0.8 ? '慢速' : '快速'}
+                                  {s === 0.95 ? '標準' : s === 0.8 ? '慢速' : '快速'}
                                 </button>
                               ))}
                             </div>
@@ -571,11 +603,16 @@ export const Quiz: React.FC<QuizProps> = ({
                             {questions[selectedReviewIndex].context}
                           </div>
                         </div>
-                      ) : (
-                        <div className="p-4 sm:p-8 bg-gray-50 border-l-4 sm:border-l-8 border-gray-900 rounded-r-2xl sm:rounded-r-3xl text-gray-900 text-sm sm:text-xl font-bold leading-relaxed shadow-inner text-left">
-                          {questions[selectedReviewIndex].context}
+                      ) : questions[selectedReviewIndex].type === 'reading' && questions[selectedReviewIndex].context ? (
+                        <div className="p-4 sm:p-6 bg-zinc-50 border border-zinc-200/80 rounded-2xl sm:rounded-3xl text-zinc-900 text-sm sm:text-base font-medium leading-relaxed shadow-xs text-left">
+                          <p className="text-xs font-black text-zinc-500 mb-2 flex items-center gap-1.5 uppercase tracking-wider">
+                            <span>📄</span> 閱讀文章段落
+                          </p>
+                          <div className="whitespace-pre-line font-jp text-zinc-800">
+                            {questions[selectedReviewIndex].context}
+                          </div>
                         </div>
-                      )
+                      ) : null
                     )}
                     
                     <div className="space-y-4">
@@ -629,9 +666,20 @@ export const Quiz: React.FC<QuizProps> = ({
            <h2 className="text-base sm:text-2xl font-black text-gray-900 tracking-tighter uppercase">{title || "測驗進行中"}</h2>
            {specificPrompt && <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">基於您的輸入內容生成</p>}
         </div>
-        <span className="text-[11px] sm:text-sm font-black text-white bg-gray-900 px-3 sm:px-6 py-1 sm:py-2.5 rounded-lg sm:rounded-2xl shadow-xl flex-shrink-0">
-          {currentIndex + 1} / {questions.length}
-        </span>
+        <div className="flex items-center gap-2">
+          {sourceArticle && (
+            <button
+              type="button"
+              onClick={() => setShowArticleModal(true)}
+              className="text-[11px] sm:text-xs font-bold text-zinc-750 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 px-2.5 sm:px-3 py-1 sm:py-2 rounded-lg sm:rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
+            >
+              <span>📰</span> <span className="hidden xs:inline">查看</span>文章全文
+            </button>
+          )}
+          <span className="text-[11px] sm:text-sm font-black text-white bg-gray-900 px-3 sm:px-6 py-1 sm:py-2.5 rounded-lg sm:rounded-2xl shadow-xl flex-shrink-0">
+            {currentIndex + 1} / {questions.length}
+          </span>
+        </div>
       </div>
       <div className="relative min-h-[300px] sm:min-h-[500px]">
         <AnimatePresence mode="wait">
@@ -660,7 +708,7 @@ export const Quiz: React.FC<QuizProps> = ({
                     {/* Speed Selector */}
                     <div className="flex items-center gap-1.5 self-end sm:self-auto">
                       <span className="text-[10px] font-bold text-zinc-400 uppercase mr-1">語速</span>
-                      {[0.8, 1.0, 1.2].map((s) => (
+                      {[0.8, 0.95, 1.15].map((s) => (
                         <button
                           key={s}
                           type="button"
@@ -676,7 +724,7 @@ export const Quiz: React.FC<QuizProps> = ({
                               : 'bg-white text-zinc-550 border border-zinc-150 hover:bg-zinc-50'
                           }`}
                         >
-                          {s === 1.0 ? '標準' : s === 0.8 ? '慢速' : '快速'}
+                          {s === 0.95 ? '標準' : s === 0.8 ? '慢速' : '快速'}
                         </button>
                       ))}
                     </div>
@@ -760,11 +808,16 @@ export const Quiz: React.FC<QuizProps> = ({
                     </AnimatePresence>
                   </div>
                 </div>
-              ) : (
-                <div className="mb-3 sm:mb-10 p-3.5 sm:p-8 bg-gray-50 border-l-2 sm:border-l-8 border-gray-900 text-gray-900 leading-relaxed rounded-r-lg sm:rounded-r-[2rem] text-[13px] sm:text-xl font-medium sm:font-bold shadow-inner">
-                  {currentQ.context}
+              ) : currentQ.type === 'reading' && currentQ.context ? (
+                <div className="mb-4 sm:mb-8 bg-zinc-50 border border-zinc-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xs text-left">
+                  <div className="flex items-center gap-2 mb-2 text-xs font-black text-zinc-500 uppercase tracking-wider">
+                    <span className="text-sm">📄</span> 閱讀測驗段落
+                  </div>
+                  <div className="text-zinc-900 leading-relaxed text-sm sm:text-base font-medium whitespace-pre-line font-jp">
+                    {currentQ.context}
+                  </div>
                 </div>
-              )
+              ) : null
             )}
             <h3 className="text-[14px] sm:text-2xl font-extrabold sm:font-black text-gray-900 mb-4 sm:mb-12 leading-snug sm:leading-tight tracking-tight whitespace-pre-line">{currentQ.question}</h3>
             <div className="grid gap-2 sm:gap-5">
@@ -804,6 +857,45 @@ export const Quiz: React.FC<QuizProps> = ({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Article Reference Modal */}
+      {showArticleModal && sourceArticle && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 max-h-[85vh] flex flex-col shadow-2xl border border-zinc-200"
+          >
+            <div className="flex justify-between items-center mb-3 pb-3 border-b border-zinc-100">
+              <h3 className="text-sm sm:text-base font-black text-zinc-900 flex items-center gap-2">
+                <span>📰</span> 測驗參考文章原文
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowArticleModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-xl hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-400 font-bold mb-2">
+              提示：您可以隨時對照此文章內容。請於閱讀後關閉視窗作答。
+            </p>
+            <div className="overflow-y-auto flex-1 text-xs sm:text-sm leading-relaxed text-zinc-800 whitespace-pre-line font-jp p-3.5 sm:p-4 bg-zinc-50 rounded-2xl border border-zinc-150">
+              {sourceArticle}
+            </div>
+            <div className="mt-4 pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowArticleModal(false)}
+                className="px-5 py-2 bg-zinc-900 text-white text-xs sm:text-sm font-bold rounded-xl hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                關閉返回測驗
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

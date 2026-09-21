@@ -119,6 +119,7 @@ export interface QuizConfig {
   specificPrompt?: string; // New field
   questionCount?: number; // Chosen number of questions (e.g., 5, 10, 15, 20)
   jlptLevel?: string; // Optional target JLPT Level
+  sourceArticle?: string; // Optional user-provided article for article-based quiz
 }
 
 export type InputMode = 'WORD' | 'GRAMMAR' | 'READING';
