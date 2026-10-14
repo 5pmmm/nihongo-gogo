@@ -7,7 +7,7 @@ interface BookmarkViewProps {
   onStartQuizWithBookmarks?: (words: WordDefinition[], grammar: GrammarDefinition[]) => void;
 }
 
-export const BookmarkView: React.FC<BookmarkViewProps> = () => {
+export const BookmarkView: React.FC<BookmarkViewProps> = ({ onStartQuizWithBookmarks }) => {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [filterType, setFilterType] = useState<'ALL' | 'WORD' | 'GRAMMAR'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,13 +64,24 @@ export const BookmarkView: React.FC<BookmarkViewProps> = () => {
           </p>
         </div>
         {bookmarks.length > 0 && (
-          <button
-            type="button"
-            onClick={handleClearAll}
-            className="text-sm text-[#8B4848] hover:text-[#6F3232] font-medium transition-colors px-3 py-1.5 rounded-lg border border-[#E9ECEF] hover:bg-[#F1F3F5] active:scale-[0.98]"
-          >
-            清空收藏
-          </button>
+          <div className="flex items-center gap-2">
+            {onStartQuizWithBookmarks && (
+              <button
+                type="button"
+                onClick={() => onStartQuizWithBookmarks([], [])}
+                className="text-sm text-white bg-[#4F6375] hover:bg-[#3D4F5F] font-bold transition-all px-4 py-1.5 rounded-lg active:scale-[0.98] shadow-xs cursor-pointer"
+              >
+                前往測驗
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-sm text-[#8B4848] hover:text-[#6F3232] font-medium transition-colors px-3 py-1.5 rounded-lg border border-[#E9ECEF] hover:bg-[#F1F3F5] active:scale-[0.98]"
+            >
+              清空收藏
+            </button>
+          </div>
         )}
       </div>
 

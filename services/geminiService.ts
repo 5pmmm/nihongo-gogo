@@ -81,6 +81,67 @@ const mockGenerateContent = async (args: any) => {
         type: "ordering"
       }
     ];
+  } else if (contentStr.includes("DAILY STUDY QUIZ")) {
+    mockData = [
+      {
+        id: "mock_daily_q1",
+        context: "",
+        question: "今日の学習単語について：漢字の正しい読み方（拼音）を選びなさい。",
+        questionReading: "きょうのがくしゅうたんごについて：かんじのただしいよみかたをえらびなさい。",
+        questionTranslation: "關於今天學習的單字：請選出該漢字正確的讀音（拼音）。",
+        options: ["やくそく", "よてい", "じゅんび", "あんない"],
+        correctAnswerIndex: 0,
+        explanation: "「約束」的正確假名讀音為「やくそく」（約定、約會）。",
+        type: "vocab"
+      },
+      {
+        id: "mock_daily_q2",
+        context: "",
+        sentence: "（駅の改札が混雑しているので、）\n私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
+        scrambleItems: ["人が", "少なく", "なって", "から"],
+        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        question: "（駅の改札が混雑しているので、）\n私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。\n【1. 人が　2. 少なく　3. なって　4. から】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        questionReading: "えきのかいさつがこんざつしているので、わたしはひとがすくなくなってからつうかした。",
+        questionTranslation: "（因為車站剪票口很擁擠，）我等搭車人變少之後才通過。",
+        options: ["人が", "少なく", "なって", "から"],
+        correctAnswerIndex: 2,
+        explanation: "【正確順序】1（人が） → 2（少なく） → 3（なって） → 4（から）。第 3 位（★ 處）為「3. なって」。前有原因前提，接續唯一鎖定，無二義性。",
+        type: "ordering"
+      },
+      {
+        id: "mock_daily_q3",
+        context: "",
+        question: "文法接續問題：この文法パターンの接續として最も自然なものを選びなさい。",
+        questionReading: "ぶんぽうせつぞくもんだい：このぶんぽうぱたーんのせつぞくとしてもっともしぜんなものをえらびなさい。",
+        questionTranslation: "文法接續問題：請選出此文法句型接續最自然之選項。",
+        options: ["辞書形", "ます形（去ます）", "て形", "ない形"],
+        correctAnswerIndex: 0,
+        explanation: "該句型前接動詞辭書形（連體形），表示一般客觀成立之前提或習慣。",
+        type: "grammar"
+      },
+      {
+        id: "mock_daily_q4",
+        context: "女：明日の会議の資料、もう印刷終わった？\n男：あ、課長の指示でグラフを差し替えることになったんだ。\n女：了解！じゃあ、差し替え後の印刷を手伝うね。",
+        transcript: "女：明日の会議の資料、もう印刷終わった？\n男：あ、課長の指示でグラフを差し替えることになったんだ。\n女：了解！じゃあ、差し替え後の印刷を手伝うね。",
+        dialogueLines: [
+          { speaker: "女", text: "明日の会議の資料、もう印刷終わった？", gender: "female" },
+          { speaker: "男", text: "あ、課長の指示でグラフを差し替えることになったんだ。", gender: "male" },
+          { speaker: "女", text: "了解！じゃあ、差し替え後の印刷を手伝うね。", gender: "female" }
+        ],
+        question: "会話の内容として最も合っているものはどれですか。",
+        questionReading: "かいわのないようとしてもっともあっているものはどれですか。",
+        questionTranslation: "對話內容中何者最符合情境？",
+        options: [
+          "グラフを差し替えてから印刷する",
+          "会議は来週に延期された",
+          "資料の印刷はすべて完了している",
+          "課長が自ら資料を印刷する"
+        ],
+        correctAnswerIndex: 0,
+        explanation: "對話中男士提到「課長の指示でグラフを差し替えることになった」，女生則說會幫忙更換後的印刷，故正確選項為第 1 項。",
+        type: "listening"
+      }
+    ];
   } else if (contentStr.includes("mixed Japanese quiz") || contentStr.includes("10-question") || contentStr.includes("engaging Japanese quiz") || contentStr.includes("quiz")) {
     mockData = [
       {
@@ -743,7 +804,7 @@ const quizSchema = {
 
 export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefinition[]> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `
       You are an expert Japanese linguist and dictionary lexicographer.
       Analyze the following Japanese word(s) or input:
@@ -782,7 +843,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
 
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `
       You are an expert Japanese grammar specialist.
       Analyze the following Japanese grammar pattern:
@@ -819,7 +880,7 @@ export const fetchSentenceVocabulary = async (sentence: string): Promise<Sentenc
     }
   };
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Extract 2 to 5 key vocabulary words from this Japanese sentence: "${sentence}". Provide dictionary form or base word, Hiragana reading, and Traditional Chinese meaning. STRICT ANTI-EMOJI RULE: Never output emojis.`,
     config: { responseMimeType: "application/json", responseSchema: schema },
   });
@@ -829,7 +890,7 @@ export const fetchSentenceVocabulary = async (sentence: string): Promise<Sentenc
 export const fetchRecommendedWords = async (level: string, count: number, exclude: string[] = [], category?: string): Promise<WordDefinition[]> => {
   const categoryPhrase = category ? ` belonging strictly to the category "${category}" (for example: daily terms, food/dining, transportation, travel, shopping)` : "";
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Recommend ${count} JLPT ${level} words${categoryPhrase}. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
   });
@@ -838,7 +899,7 @@ export const fetchRecommendedWords = async (level: string, count: number, exclud
 
 export const fetchRecommendedGrammar = async (level: string, count: number, exclude: string[]): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Recommend ${count} JLPT ${level} grammar. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: grammarSchema },
   });
@@ -848,7 +909,7 @@ export const fetchRecommendedGrammar = async (level: string, count: number, excl
 
 export const analyzeReadingText = async (input: string): Promise<ReadingMaterial> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `
       You are an expert Japanese linguist.
       Analyze the following Japanese text very carefully:
@@ -869,7 +930,7 @@ export const analyzeReadingText = async (input: string): Promise<ReadingMaterial
 
 export const generateRecommendedReading = async (level: string): Promise<ReadingMaterial> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Write an engaging, highly random, and original short article/story in Japanese suitable for JLPT ${level} learners. The topic should be completely random (for example: Japanese food culture, a seasonal festival, travel adventures, dynamic daily interactions, or a whimsical tale). Return the response strictly matching the schema with full token breakdowns and traditional Chinese (Taiwan) translations.`,
     config: { responseMimeType: "application/json", responseSchema: readingSchema },
   });
@@ -894,7 +955,7 @@ export const generateQuizFromContent = async (
     isArticleQuiz
   });
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `
       Based on the following content context: ${context}
       
@@ -1064,13 +1125,78 @@ export const generateTargetedQuiz = async (
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: prompt,
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
 
   return JSON.parse(response.text) as QuizQuestion[];
 };
+
+export interface DailyStudyQuizItem {
+  type: 'WORD' | 'GRAMMAR' | 'READING';
+  term: string;
+  summary?: string;
+  detail?: string;
+}
+
+/**
+ * 當日學習測驗專區：AI 即時針對性出題
+ * 根據使用者當天勾選的單字、文法、文章項目，由 Gemini API 即時生成針對性測驗。
+ * 涵蓋：單字拆解題、拼音題、重組題（星號題）、文章理解題、聽力題。
+ */
+export const generateDailyStudyQuiz = async (
+  items: DailyStudyQuizItem[],
+  questionCount: number = 10
+): Promise<QuizQuestion[]> => {
+  const safeCount = Math.max(3, Math.min(questionCount || 10, 15));
+  const itemsDescription = items.map((it, idx) => 
+    `${idx + 1}. [${it.type}] ${it.term}${it.summary ? ` (${it.summary})` : ''} ${it.detail ? `- ${it.detail}` : ''}`
+  ).join('\n');
+
+  const prompt = `
+    You are an expert Japanese educator and exam creator for "日本語ごご！".
+    DAILY STUDY QUIZ:
+    The student has chosen the following specific items studied today to test:
+    ${itemsDescription}
+
+    TASK:
+    Generate EXACTLY ${safeCount} focused questions testing DIRECTLY the items above.
+    
+    QUESTION TYPES (Distribute proportionately among tested items):
+    1. 單字拆解題 (type: "vocab"):
+       - Break down kanji, components, pitch accent, or usage nuance for the target vocabulary.
+    2. 拼音題 (type: "vocab"):
+       - Test accurate Hiragana reading (標音/拼音) of the kanji or compound words.
+    3. 重組題（星號題）(type: "ordering"):
+       - Must include:
+         - 'sentence': e.g. "（駅の改札が混雑中なので、）\\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
+         - 'scrambleItems': Array of 4 clean string fragments (without numeric prefixes like 1. or trailing periods).
+         - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+       - STRICT RULE: 4! = 24 unique valid solution. All other 23 permutations must be grammatically or logically invalid.
+       - 'options' matching the 4 items, with 'correctAnswerIndex' pointing to the item in the ★ slot.
+    4. 文章理解題 (type: "reading"):
+       - If any READING items were selected, ask comprehension questions based on the text. Put reading passage in 'context'.
+    5. 聽力/語音題 (type: "listening"):
+       - 'transcript' must be clean Japanese dialogue without any HTML, XML, or SSML tags.
+       - 'dialogueLines' must be provided with speaker, text, and gender ("male" | "female").
+
+    STRICT CONSTRAINTS:
+    - STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Zero emojis!
+    - Return exactly ${safeCount} questions.
+    - All explanations in Traditional Chinese (繁體中文).
+  `;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.8-flash",
+    contents: prompt,
+    config: { responseMimeType: "application/json", responseSchema: quizSchema },
+  });
+
+  return JSON.parse(response.text) as QuizQuestion[];
+};
+
+
 
 // --- LISTENING SCHEMA ---
 const listeningSchema = {
@@ -1114,7 +1240,7 @@ const listeningSchema = {
 
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS: The dialogue transcript must NOT contain any XML/HTML/SSML tags (strictly NO <prosody>, NO </prosody>). Use only pure speaker lines like "女：..." and "男：...". Break it into natural sentences/segments. Traditional Chinese translation.`,
     config: { responseMimeType: "application/json", responseSchema: listeningSchema },
   });
@@ -1123,7 +1249,7 @@ export const fetchListeningMaterial = async (level: string): Promise<any> => {
 
 export const checkListeningAnswer = async (correctText: string, userInput: string): Promise<any> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `Compare Japanese texts. Correct: "${correctText}". User input: "${userInput}". Calculate similarity (0-100) and provide encouraging feedback in Traditional Chinese.`,
     config: {
       responseMimeType: "application/json",
@@ -1187,7 +1313,7 @@ const diaryAnalysisSchema = {
 
 export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalysisResult> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: `
       You are an expert Japanese language tutor who corrects student diaries, specializing in teaching beginners and intermediate learners (specifically JLPT N4/N5 level).
       Please analyze and correct this Japanese diary entry written by a student:
