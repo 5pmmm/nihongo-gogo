@@ -107,21 +107,27 @@ export interface DialogueLine {
   gender: 'male' | 'female';
 }
 
+export type QuizQuestionCategory = 'VOCAB' | 'GRAMMAR_READING' | 'LISTENING';
+export type QuizQuestionSubType = 'vocab' | 'grammar' | 'ordering' | 'listening' | 'reading';
+
 export interface QuizQuestion {
   id: string;
   context?: string; // For reading passages or additional context
   question: string; // The question text
-  sentence?: string; // For ordering / sentence-based questions (e.g. 「（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。」)
-  scrambleItems?: string[]; // For ordering questions: 4 items to reorder (e.g. ["人が", "少なく", "なって", "から"])
-  instruction?: string; // Question instruction (e.g. 「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」)
+  sentence?: string; // For ordering / sentence-based questions
+  scrambleItems?: string[]; // For ordering questions: 4 items to reorder
+  instruction?: string; // Question instruction
   transcript?: string; // For listening: clean dialogue text without any HTML/SSML tags
   dialogueLines?: DialogueLine[]; // For listening: dialogue segments with role genders
   questionReading?: string; // Hiragana/Reading for the whole question
   questionTranslation?: string; // Chinese translation for the whole question
   options: string[]; // 4 options
   correctAnswerIndex: number;
+  answer?: number; // Answer index compatible with user-specified schema
   explanation: string;
-  type?: 'vocab' | 'grammar' | 'ordering' | 'listening' | 'reading'; // Categorized question type
+  type?: QuizQuestionCategory | QuizQuestionSubType; // 'VOCAB' | 'GRAMMAR_READING' | 'LISTENING' or sub-type
+  category?: QuizQuestionCategory;
+  subType?: QuizQuestionSubType;
   level?: 'N5' | 'N4' | 'N3' | 'N2' | 'N1'; // Target JLPT level
   year?: string; // e.g. "2024年 7月", "2023年 12月"
 }

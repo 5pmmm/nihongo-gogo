@@ -24,7 +24,8 @@ const cleanTranscriptText = (text: string) => {
 };
 
 const parseOrderingQuestion = (q: QuizQuestion) => {
-  if (q.type !== 'ordering') return null;
+  const isOrdering = q.subType === 'ordering' || q.type === 'ordering' || (q.scrambleItems && q.scrambleItems.length > 0);
+  if (!isOrdering) return null;
 
   if (q.sentence && q.scrambleItems && q.scrambleItems.length > 0) {
     return {
@@ -362,12 +363,17 @@ export const Quiz: React.FC<QuizProps> = ({
   const prepareQuestions = (qs: QuizQuestion[]) => {
     return qs.map(q => {
       let cleanedContext = q.context ? cleanTranscriptText(q.context) : q.context;
-      if (q.type === 'vocab' || q.type === 'grammar' || q.type === 'ordering') {
+      const isOrdering = q.subType === 'ordering' || q.type === 'ordering' || (q.scrambleItems && q.scrambleItems.length > 0);
+      const isVocab = q.subType === 'vocab' || q.type === 'vocab' || q.type === 'VOCAB';
+      const isGrammar = q.subType === 'grammar' || q.type === 'grammar';
+      
+      if (isVocab || isGrammar || isOrdering) {
         cleanedContext = '';
       }
 
-      if (!q.options || q.options.length <= 1) {
-        return { ...q, context: cleanedContext };
+      // Do NOT shuffle options for ordering questions, preserving 1:1 with scrambleItems
+      if (isOrdering || !q.options || q.options.length <= 1) {
+        return { ...q, context: cleanedContext, options: (q.options || []).map(cleanOptionText) };
       }
 
       const indexedOptions = q.options.map((opt, index) => ({ opt: cleanOptionText(opt), index }));
@@ -809,15 +815,18 @@ export const Quiz: React.FC<QuizProps> = ({
               {currentQ.year}
             </span>
           )}
-          {currentQ.type && (
-            <span className="px-2 py-0.5 rounded font-medium bg-[#E9ECEF] text-[#495057]">
-              {currentQ.type === 'vocab' ? '單字' : currentQ.type === 'grammar' ? '文法' : currentQ.type === 'ordering' ? '重組' : currentQ.type === 'listening' ? '聽力' : '閱讀'}
-            </span>
-          )}
+          {(() => {
+            const displayType = currentQ.subType || (currentQ.type === 'VOCAB' ? 'vocab' : currentQ.type === 'LISTENING' ? 'listening' : currentQ.scrambleItems?.length ? 'ordering' : currentQ.context ? 'reading' : 'grammar');
+            return (
+              <span className="px-2 py-0.5 rounded font-medium bg-[#E9ECEF] text-[#495057]">
+                {displayType === 'vocab' ? '單字' : displayType === 'grammar' ? '文法' : displayType === 'ordering' ? '重組' : displayType === 'listening' ? '聽力' : '閱讀'}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Listening Practice Audio Section */}
-        {currentQ.type === 'listening' && (
+        {(currentQ.subType === 'listening' || currentQ.type === 'listening' || currentQ.type === 'LISTENING' || !!currentQ.transcript) && (
           <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#495057]">
@@ -866,7 +875,7 @@ export const Quiz: React.FC<QuizProps> = ({
         )}
 
         {/* Reading Passage */}
-        {currentQ.type === 'reading' && currentQ.context && (
+        {(currentQ.subType === 'reading' || currentQ.type === 'reading' || (!currentQ.scrambleItems && !currentQ.transcript && currentQ.context)) && currentQ.context && (
           <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-sm leading-relaxed font-jp whitespace-pre-line text-[#2B303A]">
             {currentQ.context}
           </div>
