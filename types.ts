@@ -5,20 +5,31 @@ export interface SentenceWord {
   meaning: string;
 }
 
+export interface WordExample {
+  sentence: string;
+  reading: string;
+  translation: string;
+}
+
 export interface WordDefinition {
+  id?: string;
   word: string;
   reading: string;
+  pitchAccent?: string; // 重音 (e.g. 平板型 [0], 頭高型 [1])
   meaning: string;
+  partOfSpeech?: string;
+  examples?: WordExample[]; // 2~3 example sentences
   exampleSentence: string;
-  exampleReading?: string; // Hiragana reading of the example sentence
+  exampleReading?: string;
   exampleTranslation: string;
-  sentenceBreakdown?: SentenceWord[]; // Detailed breakdown of words in the sentence
+  sentenceBreakdown?: SentenceWord[];
 }
 
 export interface GrammarExample {
   sentence: string;
   reading: string;
   translation: string;
+  breakdown?: SentenceWord[]; // Key vocabulary breakdown in this example sentence
 }
 
 export interface GrammarDefinition {
@@ -90,26 +101,36 @@ export interface ListeningExerciseState {
   }[];
 }
 
+export interface DialogueLine {
+  speaker: string; // e.g. "女" or "男"
+  text: string;    // Clean Japanese dialogue text
+  gender: 'male' | 'female';
+}
+
 export interface QuizQuestion {
   id: string;
   context?: string; // For reading passages or additional context
   question: string; // The question text
+  sentence?: string; // For ordering / sentence-based questions (e.g. 「（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。」)
+  scrambleItems?: string[]; // For ordering questions: 4 items to reorder (e.g. ["人が", "少なく", "なって", "から"])
+  instruction?: string; // Question instruction (e.g. 「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」)
+  transcript?: string; // For listening: clean dialogue text without any HTML/SSML tags
+  dialogueLines?: DialogueLine[]; // For listening: dialogue segments with role genders
   questionReading?: string; // Hiragana/Reading for the whole question
   questionTranslation?: string; // Chinese translation for the whole question
   options: string[]; // 4 options
   correctAnswerIndex: number;
   explanation: string;
   type?: 'vocab' | 'grammar' | 'ordering' | 'listening' | 'reading'; // Categorized question type
+  level?: 'N5' | 'N4' | 'N3' | 'N2' | 'N1'; // Target JLPT level
+  year?: string; // e.g. "2024年 7月", "2023年 12月"
 }
 
 export enum AppMode {
-  LEARN = 'LEARN',
-  HISTORY = 'HISTORY',
+  PARSE = 'PARSE',
   QUIZ = 'QUIZ',
-  PROFILE = 'PROFILE',
-  CHAT = 'CHAT',
-  LISTENING = 'LISTENING',
-  DIARY = 'DIARY',
+  BOOKMARKS = 'BOOKMARKS',
+  LEARN = 'PARSE',
 }
 
 export interface QuizConfig {
@@ -117,9 +138,11 @@ export interface QuizConfig {
   sourceGrammar: GrammarDefinition[];
   dateLabel?: string;
   specificPrompt?: string; // New field
-  questionCount?: number; // Chosen number of questions (e.g., 5, 10, 15, 20)
+  questionCount?: number; // Chosen number of questions (e.g., 3, 5, 10, 15, 20)
   jlptLevel?: string; // Optional target JLPT Level
   sourceArticle?: string; // Optional user-provided article for article-based quiz
+  mode?: 'TARGETED_STUDY' | 'JLPT_EXAM'; // Track A (AI real-time targeted) vs Track B (JLPT exam bank)
+  targetItem?: string; // The specific word or grammar being tested in Track A
 }
 
 export type InputMode = 'WORD' | 'GRAMMAR' | 'READING';

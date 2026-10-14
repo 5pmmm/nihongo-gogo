@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult } from "../types";
+import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
 
 let globalAiInstance: GoogleGenAI | null = null;
 
@@ -32,37 +32,92 @@ const mockGenerateContent = async (args: any) => {
         }
       ]
     };
-  } else if (contentStr.includes("mixed Japanese quiz") || contentStr.includes("10-question") || contentStr.includes("mixed Japanese quiz")) {
+  } else if (contentStr.includes("TARGET FOCUS FOR THIS QUIZ") || contentStr.includes("100% REVOLVE AROUND") || contentStr.includes("targeted Japanese quiz")) {
+    const match = contentStr.match(/The student has entered the specific Japanese word or grammar pattern:\s*"([^"]+)"/) ||
+                  contentStr.match(/revolve around:\s*"([^"]+)"/i) ||
+                  contentStr.match(/target Japanese word or grammar pattern:\s*"([^"]+)"/i);
+    const target = match ? match[1] : "はずです";
+
+    mockData = [
+      {
+        id: "mock_target_q1",
+        context: "",
+        question: `真面目な彼のことだから、約束の時間を___${target.includes('はず') ? 'はずです' : target}。`,
+        questionReading: `まじめなかれのことだから、やくそくのじかんをまもる${target}。`,
+        questionTranslation: `以他認真的個性，應該會遵守約定的時間。`,
+        options: ["守る", "守った", "守って", "守り"],
+        correctAnswerIndex: 0,
+        explanation: `針對「${target}」之接續測試：前面接動詞辭書形（連體形）「守る」，表示根據客觀依據或常理推測「應該會守約」。`,
+        type: "grammar"
+      },
+      {
+        id: "mock_target_q2",
+        context: "",
+        question: `田中さんは今日病気で休んでいるので、この会議に___。`,
+        questionReading: `たなかさんはきょうびょうきでやすんでいるので、このかいぎにくるはずがありません。`,
+        questionTranslation: `田中先生今天生病請假，所以這場會議不可能會來。`,
+        options: [
+          `来る${target.includes('はず') ? 'はずがありません' : target + 'ではありません'}`,
+          `来る${target.includes('はず') ? 'はずでした' : target}`,
+          `来た${target.includes('はず') ? 'はずです' : target}`,
+          `来ない${target.includes('はず') ? 'はずでした' : target}`
+        ],
+        correctAnswerIndex: 0,
+        explanation: `針對「${target}」之否定與情境邏輯測試：前文明確給出「生病請假」之前提，因此具有強烈確信的客觀否定推論，答案為第 1 項。`,
+        type: "grammar"
+      },
+      {
+        id: "mock_target_q3",
+        context: "",
+        sentence: `（天気予報によると、明日は晴れるそうなので、）\n運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。`,
+        scrambleItems: ["予定通り", "行われる", "はず", "なの"],
+        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        question: `（天気予報によると、明日は晴れるそうなので、）\n運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。\n【1. 予定通り　2. 行われる　3. はず　4. なの】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。`,
+        questionReading: "てんきよほうによると、あしたははれるそうなので、うんどうかいはよていどおりおこなわれるはずなのです。",
+        questionTranslation: "（根據氣象預報，明天好像是大晴天，）運動會應該會按原定計畫舉行。",
+        options: ["予定通り", "行われる", "はず", "なの"],
+        correctAnswerIndex: 2,
+        explanation: `【正確順序】1（予定通り） → 2（行われる） → 3（はず） → 4（なの）\n【★ 處位置】第 3 個空格為「3. はず」。\n【唯一解文法】「副詞（予定通り）＋受身動詞連體形（行われる）＋形式名詞（はず）＋準體助詞（なの）＋です」。順序唯一鎖定，語法嚴密無二義性。`,
+        type: "ordering"
+      }
+    ];
+  } else if (contentStr.includes("mixed Japanese quiz") || contentStr.includes("10-question") || contentStr.includes("engaging Japanese quiz") || contentStr.includes("quiz")) {
     mockData = [
       {
         id: "mock_q1",
-        context: "助詞練習",
+        context: "",
         question: "私は毎日日本語___勉強します。",
         questionReading: "わたしはまいにちにほんご___べんきょうします。",
         questionTranslation: "我每天學習日文。",
         options: ["を", "が", "に", "で"],
         correctAnswerIndex: 0,
-        explanation: "「勉強する」是及物動詞，目標賓語使用助詞「を」來提示。"
+        explanation: "「勉強する」是及物動詞，目標賓語使用助詞「を」來提示。",
+        type: "grammar"
       },
       {
         id: "mock_q2",
-        context: "形容詞變化",
+        context: "",
         question: "昨日は天気が___かったです。",
         questionReading: "きのうはてんきが___かったです。",
         questionTranslation: "昨天天氣很好。",
         options: ["よ", "いい", "わる", "たか"],
         correctAnswerIndex: 0,
-        explanation: "「いい（好）」的過去式變化是「よかった（かったです）」，去い加かった。"
+        explanation: "「いい（好）」的過去式變化是「よかった（かったです）」，去い加かった。",
+        type: "vocab"
       },
       {
         id: "mock_q3",
-        context: "句子重組",
-        question: "(A)パンを (B)私は (C)食べます (D)新幹線で。請排序：",
-        questionReading: "わたしは しんかんせんで ぱんを たべます。",
-        questionTranslation: "我在新幹線上吃麵包。",
-        options: ["B-D-A-C", "B-A-D-C", "D-B-A-C", "A-B-D-C"],
-        correctAnswerIndex: 0,
-        explanation: "日語的标准句型主語在最前 (我：B)，隨後是地點副詞 (新幹線：D) 及受詞 (麵包：A)，動詞 (吃：C) 放在最後。"
+        context: "",
+        sentence: "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。",
+        scrambleItems: ["人が", "少なく", "なって", "から"],
+        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        question: "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。\n【1. 人が　2. 少なく　3. なって　4. から】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        questionReading: "えきのかいさつがこんざつちゅうなので、ひとがすくなくなってからいきましょう。",
+        questionTranslation: "（因為車站剪票口現在很擠，）等人都變少之後我們再走吧。",
+        options: ["人が", "少なく", "なって", "から"],
+        correctAnswerIndex: 2,
+        explanation: "【正確完整句子】「駅の改札が混雑中なので、人が少なく（2）なって（3）から（4）行きましょう。」\n【正確順序】1 → 2 → 3 → 4\n【★ 處位置】第 3 個空格（★）填入的是「3. なって」。\n【接續解析】動詞「なる」接在形容詞「少ない」之後轉為連用形「少なく＋なる」，再以「て形」接「から」表示「～之後才做某動作」。其他排列在日文接續語法上完全無法成立。",
+        type: "ordering"
       }
     ];
   } else if (contentStr.includes("Japanese tutor") || contentStr.includes("User says")) {
@@ -508,7 +563,7 @@ const ai = new Proxy({} as any, {
       return undefined;
     }
 
-    const key = import.meta.env.VITE_GEMINI_API_KEY || "";
+    const key = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
     if (!key) {
       if (prop === 'models') {
         return {
@@ -537,9 +592,24 @@ const wordDefinitionSchema = {
     properties: {
       word: { type: Type.STRING, description: "The Japanese word (Kanji or Kana)" },
       reading: { type: Type.STRING, description: "The Hiragana reading of the word" },
+      pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
+      partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, 他動詞, 自動詞, い形容詞, な形容詞, 副詞" },
       meaning: { type: Type.STRING, description: "Traditional Chinese meaning" },
-      exampleSentence: { type: Type.STRING, description: "A Japanese example sentence using the word" },
-      exampleReading: { type: Type.STRING, description: "The complete Hiragana reading of the example sentence" },
+      examples: {
+        type: Type.ARRAY,
+        description: "2 to 3 natural Japanese example sentences with readings and Chinese translations",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            sentence: { type: Type.STRING, description: "Japanese sentence" },
+            reading: { type: Type.STRING, description: "Hiragana reading of sentence" },
+            translation: { type: Type.STRING, description: "Traditional Chinese translation" }
+          },
+          required: ["sentence", "reading", "translation"]
+        }
+      },
+      exampleSentence: { type: Type.STRING, description: "First Japanese example sentence" },
+      exampleReading: { type: Type.STRING, description: "Hiragana reading of the example sentence" },
       exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the example sentence" },
       sentenceBreakdown: {
         type: Type.ARRAY,
@@ -566,17 +636,31 @@ const grammarSchema = {
     type: Type.OBJECT,
     properties: {
       grammarPoint: { type: Type.STRING, description: "The grammar pattern (e.g., ～ことになる)" },
-      connection: { type: Type.STRING, description: "Connection rule (e.g., Verb Dictionary Form + ...)" },
+      connection: { type: Type.STRING, description: "Detailed connection rule (e.g., 動詞連用形 / 去ます + 變化, 名詞 + の, 動詞辭書形 + ...)" },
       meaning: { type: Type.STRING, description: "Meaning in Traditional Chinese" },
       explanation: { type: Type.STRING, description: "Detailed explanation of nuance and usage in Traditional Chinese" },
       examples: {
         type: Type.ARRAY,
+        description: "2 to 3 natural Japanese example sentences",
         items: {
           type: Type.OBJECT,
           properties: {
             sentence: { type: Type.STRING, description: "Japanese example sentence" },
             reading: { type: Type.STRING, description: "Hiragana reading of the sentence" },
             translation: { type: Type.STRING, description: "Traditional Chinese translation" },
+            breakdown: {
+              type: Type.ARRAY,
+              description: "Key vocabulary words used in this sentence with reading and Chinese meaning",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  word: { type: Type.STRING, description: "Japanese word as it appears or dictionary form" },
+                  reading: { type: Type.STRING, description: "Hiragana reading" },
+                  meaning: { type: Type.STRING, description: "Traditional Chinese meaning" }
+                },
+                required: ["word", "reading", "meaning"]
+              }
+            }
           },
           required: ["sentence", "reading", "translation"],
         },
@@ -625,12 +709,33 @@ const quizSchema = {
       id: { type: Type.STRING, description: "Unique ID" },
       context: { type: Type.STRING, description: "Context text (e.g., short article, sentence background, or spoken script for listening)" },
       question: { type: Type.STRING, description: "Question text. For ordering, use segments like (A) (B) (C). For fill-in-blank, use ___." },
+      sentence: { type: Type.STRING, description: "For ordering questions: the template sentence with context and numbered slots (e.g. '（駅の改札が混雑中なので、）\\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。')" },
+      scrambleItems: { 
+        type: Type.ARRAY, 
+        items: { type: Type.STRING }, 
+        description: "For ordering questions: the 4 candidate word fragments to arrange, e.g. ['人が', '少なく', 'なって', 'から'] without numeric prefixes" 
+      },
+      instruction: { type: Type.STRING, description: "For ordering questions: instruction text, e.g. '★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。'" },
       questionReading: { type: Type.STRING, description: "Full Hiragana/Katakana reading for the question text" },
       questionTranslation: { type: Type.STRING, description: "Traditional Chinese translation for the question text" },
       options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 options" },
       correctAnswerIndex: { type: Type.INTEGER, description: "Index 0-3" },
       explanation: { type: Type.STRING, description: "Detailed explanation in Traditional Chinese. Must explain the grammar/vocabulary used." },
-      type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "listening", "reading"], description: "The type of question being generated" }
+      type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "listening", "reading"], description: "The type of question being generated" },
+      transcript: { type: Type.STRING, description: "For listening questions: pure conversation script without any XML/HTML/SSML tags" },
+      dialogueLines: {
+        type: Type.ARRAY,
+        description: "For listening questions: structured lines with speaker, text, and gender ('male' | 'female')",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            speaker: { type: Type.STRING },
+            text: { type: Type.STRING },
+            gender: { type: Type.STRING, enum: ["male", "female"] }
+          },
+          required: ["speaker", "text", "gender"]
+        }
+      }
     },
     required: ["id", "question", "questionReading", "questionTranslation", "options", "correctAnswerIndex", "explanation", "type"],
   },
@@ -640,40 +745,92 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
-      You are an expert Japanese linguist. Core task: Analyze the following Japanese content and extract vocabulary definitions:
+      You are an expert Japanese linguist and dictionary lexicographer.
+      Analyze the following Japanese word(s) or input:
       "${wordsInput}"
 
-      Your goal is to perform a highly thorough lexical analysis. Extract a wide, multi-level vocabulary set under these guidelines:
-      1. **High Comprehensiveness**: Do not perform simple selection. Capture a broad list of tokens from the text.
-      2. **Diverse Range of Difficulty**:
-         - **Advanced / Difficult Words (難詞/專有名詞)**: Extract complex compound words, advanced kanji terms, formal or literary vocabulary, and technical terms.
-         - **Everyday & Intermediate Words (日常/中等詞)**: Extract everyday words, common speech, standard verbs/adjectives, and compound phrases.
-         - **Easy / Standard Words (簡單詞)**: Extract basic terms to allow comprehensive beginner/intermediate reviews.
-         - **Specialized Names & Proper Nouns (專有名詞 / 專業術語)**: Extract place names, company and brand names, personal names, or historical terms. Map the JLPT tier to "N1", "N2", "N3", "N4", "N5" or "Unknown" as appropriate.
-      3. For each word item, provide its correct Hiragana pronunciation reading, concise contextual meaning in Traditional Chinese (Taiwan), and a high-quality example sentence in Japanese, along with its complete Furigana reading and Traditional Chinese translation.
+      MANDATORY REQUIREMENTS:
+      1. Provide accurate Hiragana reading (標音).
+      2. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
+      3. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
+      4. Provide clear, concise Traditional Chinese definition (繁體中文).
+      5. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
+      6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
       
-      Response Language: Traditional Chinese (台灣繁體中文).
+      Response Language: Traditional Chinese (繁體中文).
     `,
     config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
   });
-  return JSON.parse(response.text) as WordDefinition[];
+  const data = JSON.parse(response.text) as WordDefinition[];
+  return data.map((d, i) => {
+    // If examples array is missing or empty, build it from exampleSentence
+    let exList = d.examples && d.examples.length > 0 ? d.examples : [];
+    if (exList.length === 0 && d.exampleSentence) {
+      exList = [{
+        sentence: d.exampleSentence,
+        reading: d.exampleReading || '',
+        translation: d.exampleTranslation || ''
+      }];
+    }
+    return {
+      ...d,
+      id: d.id || `w-${Date.now()}-${i}`,
+      examples: exList
+    };
+  });
 };
 
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: `Expert Japanese grammar analysis for: "${grammarInput}". Traditional Chinese.`,
+    contents: `
+      You are an expert Japanese grammar specialist.
+      Analyze the following Japanese grammar pattern:
+      "${grammarInput}"
+
+      MANDATORY REQUIREMENTS:
+      1. grammarPoint: The canonical grammar pattern (e.g. ～はずです, ～わけにはいかない).
+      2. connection: Explicitly list grammatical conjugation rules (辭類接續變化規則，例如：動詞普通形 + はずです / い形容詞 + はずです / な形容詞 + な・である + はずです / 名詞 + の・である + はずです).
+      3. meaning: Clear, concise core meaning in Traditional Chinese.
+      4. explanation: Detailed explanation of nuance, speaker attitude, and usage distinctions.
+      5. examples: 2 to 3 natural Japanese example sentences with complete Hiragana readings, Traditional Chinese translations, and a 'breakdown' array containing 2 to 4 key vocabulary words used in each sentence with word, reading, and Chinese meaning.
+      6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
+      
+      Response Language: Traditional Chinese (繁體中文).
+    `,
     config: { responseMimeType: "application/json", responseSchema: grammarSchema },
   });
   const data = JSON.parse(response.text);
   return data.map((d: any, i: number) => ({ ...d, id: `g-${Date.now()}-${i}` }));
 };
 
-export const fetchRecommendedWords = async (level: string, count: number, exclude: string[] = [], category?: string): Promise<WordDefinition[]> => {
-  const categoryPhrase = category ? ` belonging strictly to the category "${category}" (for example: daily terms, food/dining, transportation, travel, shopping, anime/slang)` : "";
+export const fetchSentenceVocabulary = async (sentence: string): Promise<SentenceWord[]> => {
+  const schema = {
+    type: Type.ARRAY,
+    description: "Vocabulary words extracted from the sentence",
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        word: { type: Type.STRING, description: "Japanese word" },
+        reading: { type: Type.STRING, description: "Hiragana reading" },
+        meaning: { type: Type.STRING, description: "Traditional Chinese meaning" }
+      },
+      required: ["word", "reading", "meaning"]
+    }
+  };
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: `Recommend ${count} JLPT ${level} words${categoryPhrase}. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan).`,
+    contents: `Extract 2 to 5 key vocabulary words from this Japanese sentence: "${sentence}". Provide dictionary form or base word, Hiragana reading, and Traditional Chinese meaning. STRICT ANTI-EMOJI RULE: Never output emojis.`,
+    config: { responseMimeType: "application/json", responseSchema: schema },
+  });
+  return JSON.parse(response.text) as SentenceWord[];
+};
+
+export const fetchRecommendedWords = async (level: string, count: number, exclude: string[] = [], category?: string): Promise<WordDefinition[]> => {
+  const categoryPhrase = category ? ` belonging strictly to the category "${category}" (for example: daily terms, food/dining, transportation, travel, shopping)` : "";
+  const response = await ai.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: `Recommend ${count} JLPT ${level} words${categoryPhrase}. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
   });
   return JSON.parse(response.text) as WordDefinition[];
@@ -682,7 +839,7 @@ export const fetchRecommendedWords = async (level: string, count: number, exclud
 export const fetchRecommendedGrammar = async (level: string, count: number, exclude: string[]): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: `Recommend ${count} JLPT ${level} grammar. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan).`,
+    contents: `Recommend ${count} JLPT ${level} grammar. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: grammarSchema },
   });
   const data = JSON.parse(response.text);
@@ -693,23 +850,17 @@ export const analyzeReadingText = async (input: string): Promise<ReadingMaterial
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: `
-      You are an expert Japanese linguist. Core task: Analyze the following Japanese text very carefully:
+      You are an expert Japanese linguist.
+      Analyze the following Japanese text very carefully:
       "${input}"
 
-      Your goal is to perform a highly comprehensive lexical and grammatical breakdown.
-      Extract a wide and extensive range of important, everyday, intermediate, and advanced vocabulary (VOCAB), as well as key grammar patterns (GRAMMAR) from this text.
-
-      MANDATORY extraction details:
-      1. DO NOT be overly selective. Produce a thorough, extensive list of words that represents all parts of the text.
-      2. Ensure a fully balanced selection that highlights the entire difficulty spectrum:
-         - **Difficult/Advanced Words**: Extract complex terms, compounds, kanji with advanced readings, literary words, and sophisticated verbs (map to JLPT N1 or N2).
-         - **Everyday & Intermediate Words**: Extract daily conversational words, compound particles, common nouns, verbs, adverbs, and adjectives (map to N3 or N4).
-         - **Simple/Easy Words**: Extract standard, basic words that beginner learners can review (map to N5).
-         - **Proper Nouns & Specialized Terminology (專有名詞 / 專業術語)**: Extract names of places, people, historical events, brand names, or field-specific terminology. Categorize these under 'Unknown'.
-      3. For each vocabulary or grammar item, provide its Base Form, precise Hiragana Reading (for pronunciation), contextual meaning in Traditional Chinese (Taiwan), and a high-quality example sentence showing natural usage in context, including its furigana reading and translation.
-      4. Avoid duplicate tokens.
+      MANDATORY REQUIREMENTS:
+      1. Provide a concise title and the full article content.
+      2. Provide a complete, natural Traditional Chinese translation of the entire article text.
+      3. Extract key vocabulary (VOCAB) and grammar patterns (GRAMMAR) from this text with dictionary forms, Hiragana readings, contextual meanings, JLPT levels, and 1 example sentence each.
+      4. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
       
-      Response language: Traditional Chinese (繁體中文).
+      Response Language: Traditional Chinese (繁體中文).
     `,
     config: { responseMimeType: "application/json", responseSchema: readingSchema },
   });
@@ -801,15 +952,27 @@ export const generateQuizFromContent = async (
            3. **干擾項邏輯**:
               - 錯誤選項（B、C、D）必須為明顯的文法錯誤或不自然接續，不得僅依靠前後主詞或名詞對調來充當選項。
          - Follow this strict formatting structure for ordering questions:
-           - The 'question' property MUST specify a template sentence with four numbered underlines like this: "（語境前文，如：コーヒーが苦手なので、）私は ①＿ ②＿ ③★＿ ④＿ いいです。" and ask the user to find the segment that goes into the star ★ (3rd space) position.
-           - Below that template, list the 4 unordered word/phrase segments clearly using brackets (e.g. "【重組單字區：1. 紅茶 / 2. コーヒー / 3. のほうが / 4. より】").
-           - Below that list, write the clear instruction: "請重組句子，並選出 ★ (第三個空格) 處正確的重組單字：".
-           - 'options': Provide the 4 candidate words from the 【重組單字區】 without alphabetical or numerical prefixes (e.g. ["紅茶", "コーヒー", "のほうが", "より"]). 'correctAnswerIndex' must accurately point to the segment that fits into the ★ (第三個空格) position! (Alternatively, if full sequence paths are provided, they must be formatted as "2 → 4 → 1 → 3 (コーヒーより紅茶のほうが)" where incorrect paths contain obvious grammatical connection errors).
-           - 'explanation': MUST provide:
-             1. 完整正確句子 (e.g. 「コーヒーが苦手なので、私はコーヒーより紅茶のほうがいいです。」)
-             2. 正確排列順序 (e.g. 「2 → 4 → 1 → 3」)
-             3. ★ 處單字明確指認 (e.g. 「第 3 個空格（★）放入的是『1. 紅茶』」)
-             4. 詳細文法剖析：解釋接續關係（「名詞＋より＋名詞＋のほうが＋形容詞」句型，因前文提到不喝咖啡，因此鎖定咖啡比紅茶），並逐一指出為何其他順序無法成立。
+           - **'sentence'**: The Japanese template sentence with context and 4 numbered underlines:
+             e.g., "（駅の改札が混雑中なので、）
+①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
+             Use newline '
+' between the preceding context and the blank underlines to ensure clean line breaks.
+           - **'scrambleItems'**: Array of 4 unordered segments to arrange, WITHOUT numeric prefixes:
+             e.g., ["人が", "少なく", "なって", "から"]
+             Must be pure words/phrases WITHOUT "1." or "2." prefixes and WITHOUT ending periods (。).
+           - **'instruction'**: Standard JLPT instruction string:
+             "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+           - **'question'**: Full integrated question text for backward compatibility:
+             "（駅の改札が混雑中なので、）
+①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。
+【1. 人が　2. 少なく　3. なって　4. から】
+★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+           - **'options'**: Provide the 4 candidate words from 'scrambleItems' without alphabetical or numerical prefixes (e.g. ["人が", "少なく", "なって", "から"]). 'correctAnswerIndex' must accurately point to the index (0-3) of the word that belongs in the ★ (3rd space) position!
+           - **'explanation'**: MUST provide:
+             1. 完整正確句子 (e.g. 「駅の改札が混雑中なので、人が少なく（2）なって（3）から（4）行きましょう。」)
+             2. 正確排列順序 (e.g. 「1 → 2 → 3 → 4」)
+             3. ★ 處單字明確指認 (e.g. 「第 3 個空格（★）放入的是『3. なって』」)
+             4. 詳細文法剖析：解釋各詞段接續關係與助詞格位，並逐一指出為何其他順序無法成立。
           
       4. **Type: "listening"** - LISTENING COMPREHENSION SIMULATION (聽力情境模擬題):
          - Since this is a visual app, you must simulate a listening question:
@@ -817,8 +980,7 @@ export const generateQuizFromContent = async (
              - The generated 'context' (spoken script / 對話原文) **MUST NOT contain any XML, HTML, or SSML tags** (strictly NO <prosody>, NO </prosody>, NO <voice>, NO XML tags whatsoever).
              - The transcript must contain ONLY pure, clean Japanese text with speaker markers (e.g. "女：", "男：").
              - Example format:
-               "🎧 [聽力播放模擬]
-女：昨日、大切な書類をなくしちゃって本当に焦ったよ。
+               "女：昨日、大切な書類をなくしちゃって本当に焦ったよ。
 男：えっ、本当？見つかったの？
 女：うん、同僚の机の上に置き忘れていただけだったの。"
            - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人在對話中討論了什麼？" or "女生最後在哪裡找到重要文件？").
@@ -843,170 +1005,71 @@ export const generateQuizFromContent = async (
   return JSON.parse(response.text) as QuizQuestion[];
 };
 
-export const getChatResponse = async (
-  history: ChatMessage[],
-  newMessage: string,
-  context?: string,
-  image?: string
-): Promise<any> => {
-  const historyWithoutImages = history.map(h => ({
-    role: h.role,
-    text: h.text,
-    translation: h.translation,
-    translationEn: h.translationEn,
-    correction: h.correction,
-    timestamp: h.timestamp,
-    hasImage: !!h.image
-  }));
+/**
+ * 學習解析頁面的測驗（AI 即時針對性出題）
+ * 嚴格圍繞使用者輸入之單字或文法（例如：「はずです」），由 Gemini API 即時生成 3~5 題針對性練習（包含例句填空、重組題）。
+ * 嚴禁從預設的 JLPT 題庫中隨機抓題，100% 命中使用者指定內容！
+ */
+export const generateTargetedQuiz = async (
+  targetItem: string,
+  questionCount: number = 3,
+  level?: string
+): Promise<QuizQuestion[]> => {
+  const safeCount = Math.max(3, Math.min(questionCount || 3, 5));
+  const cleanTarget = targetItem.trim();
 
-  const chatPrompt = `You are a professional Japanese tutor. 
-User says: "${newMessage}". (Note: User may input in Traditional Chinese, English, or Japanese, or a mix of them).
-History of past chat: ${JSON.stringify(historyWithoutImages)}.
-Context: ${context || 'None'}.
-
-Task:
-1. Always reply primarily in friendly, polite Japanese (以日文對答為主).
-2. Fully support and acknowledge inputs in Traditional Chinese, English, or Japanese.
-3. If an image is provided, examine it, teach the user relevant Japanese terms or describe what's in the image.
-4. Correct any grammar, spelling, or particle errors in the user's input politely.
-5. Provide both polished Traditional Chinese (zh-TW) and English translations of your Japanese reply.`;
-
-  let requestContents: any = chatPrompt;
-
-  if (image) {
-    const match = image.match(/^data:(image\/[a-zA-Z0-9.-]+);base64,(.+)$/);
-    if (match) {
-      const mimeType = match[1];
-      const base64Data = match[2];
-      
-      const imagePart = {
-        inlineData: {
-          mimeType,
-          data: base64Data
-        }
-      };
-      
-      const textPart = {
-        text: chatPrompt
-      };
-      
-      requestContents = { parts: [imagePart, textPart] };
-    }
-  }
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
-    contents: requestContents,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          reply: { type: Type.STRING, description: "Your Japanese reply as a friendly tutor. Talk about the image in Japanese if uploaded!" },
-          translation: { type: Type.STRING, description: "Traditional Chinese translation of your reply." },
-          translationEn: { type: Type.STRING, description: "English translation of your reply." },
-          correction: { 
-            type: Type.OBJECT, 
-            description: "Optional grammar or spelling correction if the user made any mistake in their last message. Return null or do NOT include this object if no correction is needed.",
-            properties: {
-              correctedJapanese: { type: Type.STRING, description: "The corrected and polished Japanese sentence." },
-              explanationChinese: { type: Type.STRING, description: "Clear and helpful explanation of the error or suggestions in Traditional Chinese (Taiwan)." },
-              explanationEnglish: { type: Type.STRING, description: "Clear and helpful explanation in English." }
-            },
-            required: ["correctedJapanese", "explanationChinese", "explanationEnglish"]
-          }
-        },
-        required: ["reply", "translation", "translationEn"]
-      }
-    }
-  });
-  return JSON.parse(response.text);
-};
-
-// Travel Photo Scanner/Translator Schema
-const travelTranslationSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING, description: "Identify what this is (e.g. 'Ramen Shop Menu' or 'Skin hydration cream label')" },
-    originalLanguage: { type: Type.STRING, description: "The original detected language" },
-    translatedTextZh: { type: Type.STRING, description: "Polished overall Traditional Chinese translation / Summary" },
-    translatedTextEn: { type: Type.STRING, description: "Polished overall English translation / Summary" },
-    pronunciation: { type: Type.STRING, description: "Romaji or Hiragana pronunciation helper for the main title/text" },
-    detectedItems: {
-      type: Type.ARRAY,
-      description: "List of items, words, prices, or ingredients detected in the image",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          original: { type: Type.STRING, description: "Japanese text from the item" },
-          kana: { type: Type.STRING, description: "Hiragana/Katakana pronunciation guide" },
-          romaji: { type: Type.STRING, description: "Romaji guide (very helpful for ordering out loud)" },
-          translationZh: { type: Type.STRING, description: "Meaning in Traditional Chinese" },
-          translationEn: { type: Type.STRING, description: "Meaning in English" },
-          description: { type: Type.STRING, description: "Brief description, ingredients help, key options, allergies advice or warning (optional)" }
-        },
-        required: ["original", "kana", "romaji", "translationZh", "translationEn"]
-      }
-    },
-    travelTips: { type: Type.STRING, description: "Highly comprehensive, helpful reminders, usage notices, allergen safety cautions (過敏原提示如蛋、奶、小麥、花生等), caffeine warnings, tax refund details, and preparation guidelines written in comforting Traditional Chinese, structured cleanly with bullets" }
-  },
-  required: ["title", "translatedTextZh", "translatedTextEn", "detectedItems", "travelTips"]
-};
-
-export const translateTravelPhoto = async (
-  image: string,
-  scanType: 'MENU' | 'LABEL' | 'SIGN' | 'GENERAL'
-): Promise<any> => {
-  const match = image.match(/^data:(image\/[a-zA-Z0-9.-]+);base64,(.+)$/);
-  if (!match) {
-    throw new Error("Invalid image format. Base64 expected.");
-  }
-  
-  const mimeType = match[1];
-  const base64Data = match[2];
-
-  const scanTypeLabels = {
-    MENU: "菜單 (Menu / Food Items / Soft drinks lists)",
-    LABEL: "商品標籤 / 包裝細節 / 藥妝說明 / 成分成分表與警語 (Product Package / Ingredients Sheet / Drug & Cosmetics Label)",
-    SIGN: "路標 / 指路牌 / 警告告示 / 指示牌 (Signboard / Public Notice / Danger Signs)",
-    GENERAL: "整合性拍照直譯 (Universal Sight Scan)"
-  };
-
-  const prompt = `You are an elite, real-time Japanese travel scanner and translator assisting tourists in Japan.
-The user has uploaded a photo of a ${scanTypeLabels[scanType]} and requires an extremely comprehensive, clear, and detailed analysis.
-
-CRITICAL DIRECTIVES:
-1. DEEP & THOROUGH SCANNING: You MUST scan and extract everything visible. Do not focus only on large main headings. Carefully parse small prints, tiny background texts, ingredients lists, nutrition tables, manufacturer guidelines, additives labels, allergen warnings (such as 蛋/egg, 乳/milk, 小麥/wheat, 蕎麥/buckwheat, 花生/peanut, 蝦/shrimp, 蟹/crab, 肉類/meat etc.), spicy labels, side effects, or warning statements.
-2. DETAILED ITEM BREAKDOWN: In the "detectedItems" array, list these items from largest/most prominent to the smallest prints or minor details. For each item:
-   - Provide the exact Japanese text as written ("original").
-   - Provide the phonetic guide ("kana" and "romaji") so a tourist can pronounce it.
-   - Provide a natural and accurate Traditional Chinese translation ("translationZh").
-   - Use the "description" field to fully detail what this item represents, its ingredients, allergen warnings, or volume/quantity markings, making sure to highlight any risk factors.
-3. EXTRACT WARN reminder (貼心提醒):
-   - Compile all dietary rules, caffeine presence, alcohol presence, pediatric warnings, critical warnings, tax-free tips, usage instructions, or spicy/allergen notations comprehensively under the "travelTips" field in Traditional Chinese.
-   - Organize "travelTips" clearly with warm, empathetic markdown list bullet points so they are visually appealing and easily understandable to read.`;
-
-  const imagePart = {
-    inlineData: {
-      mimeType,
-      data: base64Data
-    }
-  };
-
-  const textPart = {
-    text: prompt
-  };
+  const prompt = `
+    You are an elite Japanese language teacher and JLPT exam designer.
+    
+    TARGET FOCUS FOR THIS QUIZ:
+    The student has entered the specific Japanese word or grammar pattern: "${cleanTarget}".
+    
+    CRITICAL MANDATE:
+    Generate EXACTLY ${safeCount} questions (between 3 and 5 questions) that STRICTLY and 100% REVOLVE AROUND "${cleanTarget}".
+    
+    RULES FOR TARGETED QUIZ (嚴格針對特定單字/文法出題):
+    1. 100% TARGET RELEVANCE:
+       - Every single question must directly test the student's mastery of "${cleanTarget}".
+       - DO NOT produce generic or unrelated JLPT questions! Under NO circumstances fallback to unrelated preset topics.
+       - If "${cleanTarget}" is a grammar pattern (e.g. "はずです", "～わけにはいかない", "～てたまらない", "～ようになっている"):
+         - Test connection rules (接續：動詞普通形、名詞+の、形容詞接續等).
+         - Test contextual nuances (推測、客觀依據、講者態度) and negative forms (e.g. はずがない vs はずではない).
+         - Include natural conversation dialogs and sentences with "___" where "${cleanTarget}" is tested.
+       - If "${cleanTarget}" is a vocabulary item (e.g. "気にする", "約束", "準備", "複雑"):
+         - Test collocations, particle pairings, nuance vs synonyms, kanji readings, and fill-in-the-blank.
+    
+    2. QUESTION FORMAT VARIETY:
+       - 1-2 sentence fill-in-the-blank questions (type: "grammar" or "vocab") where the blank "___" tests "${cleanTarget}" or its connection.
+       - At least 1 sentence reordering question (type: "ordering") that features "${cleanTarget}" or its grammatical components within the 4 scramble items.
+    
+    3. STRICT ORDERING QUESTION REQUIREMENTS (唯一解約束):
+       - For ordering questions (星號題 / 並び替え):
+         - The 4 scramble items MUST have ONE AND ONLY ONE mathematically and grammatically possible sequence (4! = 24 種組合中僅有 1 種合法順序，全宇宙唯一解).
+         - The sentence stem MUST provide preceding context (e.g. "（真面目な山田さんのことだから、）\\n会議の資料は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ はずです。").
+         - Separate fields cleanly:
+           - 'sentence': Template sentence with preceding context and numbered underlines.
+           - 'scrambleItems': Array of 4 clean string fragments (without "1." prefix or trailing periods).
+           - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+         - NEVER output raw literal "\\n" text in strings.
+         - 'options' must correspond to the 4 items, with 'correctAnswerIndex' identifying the item in the ★ slot.
+    
+    4. CRITICAL ANTI-SPOILER RULE:
+       - Keep 'context' field empty ("") for all questions! Never put the unblanked sentence or answer in 'context'.
+    
+    5. LEVEL & EXPLANATIONS:
+       - Target approximately JLPT ${level || 'N3'} difficulty.
+       - Provide crystal-clear, detailed explanations in Traditional Chinese (繁體中文, 台灣) detailing why the correct option is right and why the other 3 distractors are grammatically/contextually invalid.
+       
+    Return exactly ${safeCount} questions.
+  `;
 
   const response = await ai.models.generateContent({
     model: "gemini-3.5-flash",
-    contents: { parts: [imagePart, textPart] },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: travelTranslationSchema
-    }
+    contents: prompt,
+    config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
 
-  return JSON.parse(response.text);
+  return JSON.parse(response.text) as QuizQuestion[];
 };
 
 // --- LISTENING SCHEMA ---
@@ -1159,176 +1222,5 @@ export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalys
   return JSON.parse(response.text) as DiaryAnalysisResult;
 };
 
-// --- AI ASSISTANT SCHEMA ---
-export interface TransitStep {
-  instruction: string;
-  mode: 'WALK' | 'SUBWAY' | 'BUS' | 'TRAIN' | 'DRIVE' | 'BICYCLE' | 'FLIGHT';
-  duration: string;
-  cost?: string;
-  stops?: string[];
-}
-
-export interface RouteMapData {
-  startPoint: string;
-  endPoint: string;
-  totalDuration: string;
-  totalCost?: string;
-  steps: TransitStep[];
-}
-
-export interface CurrencyData {
-  fromUnit: string;
-  toUnit: string;
-  amount: number;
-  rate: number;
-  convertedAmount: number;
-}
-
-export interface RecipeData {
-  dishName: string;
-  prepTime: string;
-  difficulty: string;
-  ingredients: string[];
-  instructions: string[];
-}
-
-export interface AssistantResponse {
-  textAnswer: string;
-  detectedType: 'ROUTE' | 'RECIPE' | 'EXCHANGE_RATE' | 'GENERAL_KNOWLEDGE' | 'DAILY_AFFAIRS';
-  sources: { title: string; url: string }[];
-  routeMap?: RouteMapData;
-  currencyConverter?: CurrencyData;
-  recipeDetail?: RecipeData;
-}
-
-const assistantSchema = {
-  type: Type.OBJECT,
-  properties: {
-    textAnswer: { type: Type.STRING, description: "The thorough main answer to the query in Traditional Chinese (Taiwan), supporting proper markdown headings, bullet points, and paragraphs." },
-    detectedType: { type: Type.STRING, enum: ["ROUTE", "RECIPE", "EXCHANGE_RATE", "GENERAL_KNOWLEDGE", "DAILY_AFFAIRS"], description: "The category that best fits the query." },
-    sources: {
-      type: Type.ARRAY,
-      description: "2-4 authoritative web search sources, wiki links, official portals, news sources, or reference sites related to the answer.",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING, description: "Name of the source or article" },
-          url: { type: Type.STRING, description: "Helpful reference URL (e.g., wiki, google maps, or general informative site)" }
-        },
-        required: ["title", "url"]
-      }
-    },
-    routeMap: {
-      type: Type.OBJECT,
-      description: "Detailed transit route/directions schematic (ONLY populate if relevant to directions, transit lines, voyages, or travel routes)",
-      properties: {
-        startPoint: { type: Type.STRING, description: "Starting point" },
-        endPoint: { type: Type.STRING, description: "Destination point" },
-        totalDuration: { type: Type.STRING, description: "e.g., '1小時15分鐘' or '25分鐘'" },
-        totalCost: { type: Type.STRING, description: "e.g., '140 TWD', '650日圓', or '免費'" },
-        steps: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              instruction: { type: Type.STRING, description: "Step-by-step instruction, e.g. '搭捷運板南線往南港方向'" },
-              mode: { type: Type.STRING, enum: ["WALK", "SUBWAY", "BUS", "TRAIN", "DRIVE", "BICYCLE", "FLIGHT"] },
-              duration: { type: Type.STRING, description: "Duration of this step, e.g., '12分鐘'" },
-              cost: { type: Type.STRING, description: "Cost of this step if any" },
-              stops: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING },
-                description: "Intermediate stops, station names or landmarks passed along this step (optional)"
-              }
-            },
-            required: ["instruction", "mode", "duration"]
-          }
-        }
-      },
-      required: ["startPoint", "endPoint", "totalDuration", "steps"]
-    },
-    currencyConverter: {
-      type: Type.OBJECT,
-      description: "Currency converter metadata (ONLY populate if relevant to currency exchange rates or money/price conversion query)",
-      properties: {
-        fromUnit: { type: Type.STRING, description: "Source currency code" },
-        toUnit: { type: Type.STRING, description: "Target currency code" },
-        amount: { type: Type.NUMBER, description: "Source amount" },
-        rate: { type: Type.NUMBER, description: "Conversion rate" },
-        convertedAmount: { type: Type.NUMBER, description: "Resulting converted amount" }
-      },
-      required: ["fromUnit", "toUnit", "amount", "convertedAmount", "rate"]
-    },
-    recipeDetail: {
-      type: Type.OBJECT,
-      description: "Interactive recipe information (ONLY populate if relevant to dishes, cooking, ingredients, bakes, or beverage mixes)",
-      properties: {
-        dishName: { type: Type.STRING },
-        prepTime: { type: Type.STRING, description: "Preparation & cook time" },
-        difficulty: { type: Type.STRING, description: "e.g., '簡單', '中等', '挑戰'" },
-        ingredients: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Ingredients list with amount, e.g. ['低筋麵粉 120克', '砂糖 50克']"
-        },
-        instructions: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Complete list of step instructions"
-        }
-      },
-      required: ["dishName", "prepTime", "difficulty", "ingredients", "instructions"]
-    }
-  },
-  required: ["textAnswer", "detectedType", "sources"]
-};
-
-export interface ChatMessage {
-  role: 'user' | 'model';
-  text: string;
-}
-
-export const analyzeAssistantQuery = async (
-  query: string,
-  history?: ChatMessage[]
-): Promise<AssistantResponse> => {
-  let conversationContext = "";
-  if (history && history.length > 0) {
-    conversationContext = "Here is the conversation history so far for context, leading up to this follow-up query:\n" +
-      history.map(msg => `- ${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`).join('\n') +
-      "\n\nNow, please answer the user's latest follow-up question below while preserving this context.\n";
-  }
-
-  const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
-    contents: `
-      You are highly styled AI Smart Assistant with the knowledge capabilities of Gemini and Google Search.
-      
-      ${conversationContext}
-      
-      Core task: Respond thoroughly to the following user query:
-      "${query}"
-
-      Depending on the query type (direction route, recipe cooking, currency conversion, general knowledge, or daily affairs), analyze it completely.
-      1. Provide a comprehensive, clear, polite and format-rich answer in Traditional Chinese (Taiwan, 繁體中文).
-      2. Set 'detectedType' to 'ROUTE' if they query about directions, how to get from point A to B, transit lines, driving, walking, or geographic pathways.
-      3. Set 'detectedType' to 'RECIPE' if they ask how to cook something, recipes, baked goods, or drink instructions.
-      4. Set 'detectedType' to 'EXCHANGE_RATE' if they ask about currency conversion, exchange rates, prices in different currencies, etc.
-      5. Set 'detectedType' to 'GENERAL_KNOWLEDGE' or 'DAILY_AFFAIRS' for general topics.
-      6. Return 2-4 appropriate search citations/references under 'sources' showing where information came from (real-world web domains or helpful URL bookmarks related to the topic).
-      7. Format the textAnswer beautifully and compactly. Ensure paragraphs have clean formatting, and **strictly avoid excessive empty lines, redundant consecutive double-nl \\n\\n, or empty spacing tokens like '\\n2. \\n\\n*'**. Keep list numbering tight without empty lines inside lists. Write naturally as a professional narrator in beautiful, pure Traditional Chinese (Taiwan).
-      8. CRITICAL: Avoid any corrupt or garbled characters, unescaped quotes inside JSON strings, or raw backslash escape strings. The response must be perfectly readable Traditional Chinese. Do not mix irrelevant language/characters.
-
-      If 'detectedType' as 'ROUTE', you MUST populate 'routeMap' with an extremely detailed transit schedule including realistic intermediary stations, methods of transit, walking durations, total costs, etc.
-    `,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: assistantSchema,
-      tools: [{ googleSearch: {} }]
-    }
-  });
-
-  return JSON.parse(response.text) as AssistantResponse;
-};
 
 
