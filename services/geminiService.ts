@@ -69,15 +69,15 @@ const mockGenerateContent = async (args: any) => {
       {
         id: "mock_target_q3",
         context: "",
-        sentence: `（天気予報によると、明日は晴れるそうなので、）\n運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。`,
+        sentence: "（天気予報によると、明日は晴れるそうなので、）運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。",
         scrambleItems: ["予定通り", "行われる", "はず", "なの"],
         instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        question: `（天気予報によると、明日は晴れるそうなので、）\n運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。\n【1. 予定通り　2. 行われる　3. はず　4. なの】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。`,
+        question: "（天気予報によると、明日は晴れるそうなので、）運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。",
         questionReading: "てんきよほうによると、あしたははれるそうなので、うんどうかいはよていどおりおこなわれるはずなのです。",
         questionTranslation: "（根據氣象預報，明天好像是大晴天，）運動會應該會按原定計畫舉行。",
         options: ["予定通り", "行われる", "はず", "なの"],
         correctAnswerIndex: 2,
-        explanation: `【正確順序】1（予定通り） → 2（行われる） → 3（はず） → 4（なの）\n【★ 處位置】第 3 個空格為「3. はず」。\n【唯一解文法】「副詞（予定通り）＋受身動詞連體形（行われる）＋形式名詞（はず）＋準體助詞（なの）＋です」。順序唯一鎖定，語法嚴密無二義性。`,
+        explanation: "【正確順序】1（予定通り） → 2（行われる） → 3（はず） → 4（なの）。第 3 個空格（★ 處）為「3. はず」。【唯一解文法】「副詞（予定通り）＋受身動詞連體形（行われる）＋形式名詞（はず）＋準體助詞（なの）＋です」。順序唯一鎖定，語法嚴密無二義性。",
         type: "ordering"
       }
     ];
@@ -86,9 +86,11 @@ const mockGenerateContent = async (args: any) => {
       {
         id: "mock_daily_q1",
         context: "",
-        question: "今日の学習単語について：漢字の正しい読み方（拼音）を選びなさい。",
-        questionReading: "きょうのがくしゅうたんごについて：かんじのただしいよみかたをえらびなさい。",
-        questionTranslation: "關於今天學習的單字：請選出該漢字正確的讀音（拼音）。",
+        instruction: "下線部の漢字の正しい読み方（拼音）を選びなさい。",
+        question: "彼女と映画を見る【約束】をした。",
+        sentence: "彼女と映画を見る【約束】をした。",
+        questionReading: "かのじょとえいがをみるやくそくをした。",
+        questionTranslation: "我和她約好了要去看電影。",
         options: ["やくそく", "よてい", "じゅんび", "あんない"],
         correctAnswerIndex: 0,
         explanation: "「約束」的正確假名讀音為「やくそく」（約定、約會）。",
@@ -97,10 +99,10 @@ const mockGenerateContent = async (args: any) => {
       {
         id: "mock_daily_q2",
         context: "",
-        sentence: "（駅の改札が混雑しているので、）\n私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
-        scrambleItems: ["人が", "少なく", "なって", "から"],
         instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        question: "（駅の改札が混雑しているので、）\n私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。\n【1. 人が　2. 少なく　3. なって　4. から】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        sentence: "（駅の改札が混雑しているので、）私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
+        scrambleItems: ["人が", "少なく", "なって", "から"],
+        question: "（駅の改札が混雑しているので、）私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
         questionReading: "えきのかいさつがこんざつしているので、わたしはひとがすくなくなってからつうかした。",
         questionTranslation: "（因為車站剪票口很擁擠，）我等搭車人變少之後才通過。",
         options: ["人が", "少なく", "なって", "から"],
@@ -111,12 +113,14 @@ const mockGenerateContent = async (args: any) => {
       {
         id: "mock_daily_q3",
         context: "",
-        question: "文法接續問題：この文法パターンの接續として最も自然なものを選びなさい。",
-        questionReading: "ぶんぽうせつぞくもんだい：このぶんぽうぱたーんのせつぞくとしてもっともしぜんなものをえらびなさい。",
-        questionTranslation: "文法接續問題：請選出此文法句型接續最自然之選項。",
+        instruction: "文法接續問題：この文法パターンの接續として最も自然なものを選びなさい。",
+        question: "「〜はずです」の直前に接続する動詞の活用形として最も適切なものはどれか。",
+        sentence: "「〜はずです」の直前に接続する動詞の活用形として最も適切なものはどれか。",
+        questionReading: "はずですのちょくぜんにせつぞくするどうしのかつようけいとしてもっともてきせつなものはどれか。",
+        questionTranslation: "文法接續問題：接在「〜はずです」前面的動詞形式何者最適當？",
         options: ["辞書形", "ます形（去ます）", "て形", "ない形"],
         correctAnswerIndex: 0,
-        explanation: "該句型前接動詞辭書形（連體形），表示一般客觀成立之前提或習慣。",
+        explanation: "「〜はずです」前接動詞辭書形（連體形），表示根據客觀常理推測「應該會...」。",
         type: "grammar"
       },
       {
@@ -128,6 +132,7 @@ const mockGenerateContent = async (args: any) => {
           { speaker: "男", text: "あ、課長の指示でグラフを差し替えることになったんだ。", gender: "male" },
           { speaker: "女", text: "了解！じゃあ、差し替え後の印刷を手伝うね。", gender: "female" }
         ],
+        instruction: "会話を聞いて、次の問いに答えなさい。",
         question: "会話の内容として最も合っているものはどれですか。",
         questionReading: "かいわのないようとしてもっともあっているものはどれですか。",
         questionTranslation: "對話內容中何者最符合情境？",
@@ -1163,25 +1168,32 @@ export const generateDailyStudyQuiz = async (
     TASK:
     Generate EXACTLY ${safeCount} focused questions testing DIRECTLY the items above.
     
-    QUESTION TYPES (Distribute proportionately among tested items):
+    QUESTION TYPES & STRICT FIELD SEPARATION:
     1. 單字拆解題 (type: "vocab"):
-       - Break down kanji, components, pitch accent, or usage nuance for the target vocabulary.
+       - 'instruction': "下線の言葉の用法や意味として最も適当なものを選びなさい。"
+       - 'question': Clean target Japanese sentence or term (e.g. "彼女の【約束】を守る姿勢に感動した。").
     2. 拼音題 (type: "vocab"):
-       - Test accurate Hiragana reading (標音/拼音) of the kanji or compound words.
+       - 'instruction': "下線部の漢字の正しい読み方（拼音）を選びなさい。"
+       - 'question': Clean target Japanese sentence with kanji target (e.g. "彼との【約束】を忘れてはいけない。").
     3. 重組題（星號題）(type: "ordering"):
-       - Must include:
-         - 'sentence': e.g. "（駅の改札が混雑中なので、）\\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
-         - 'scrambleItems': Array of 4 clean string fragments (without numeric prefixes like 1. or trailing periods).
-         - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+       - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+       - 'sentence': Clean sentence with context and underlines, e.g. "（駅の改札が混雑中なので、）①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。" (DO NOT include literal '\\n' or duplicate candidate blocks).
+       - 'scrambleItems': Array of 4 clean string fragments (without numeric prefixes like 1. or trailing periods).
        - STRICT RULE: 4! = 24 unique valid solution. All other 23 permutations must be grammatically or logically invalid.
        - 'options' matching the 4 items, with 'correctAnswerIndex' pointing to the item in the ★ slot.
     4. 文章理解題 (type: "reading"):
-       - If any READING items were selected, ask comprehension questions based on the text. Put reading passage in 'context'.
+       - 'instruction': "文章を読んで、次の問いに最も適した答えを選びなさい。"
+       - 'context': The Japanese reading passage.
+       - 'question': The comprehension question.
     5. 聽力/語音題 (type: "listening"):
-       - 'transcript' must be clean Japanese dialogue without any HTML, XML, or SSML tags.
-       - 'dialogueLines' must be provided with speaker, text, and gender ("male" | "female").
+       - 'instruction': "会話を聞いて、質問に最も適した答えを選びなさい。"
+       - 'transcript': Clean Japanese dialogue without any HTML, XML, or SSML tags.
+       - 'dialogueLines': Provided with speaker, text, and gender ("male" | "female").
+       - 'question': The question about the dialogue.
 
-    STRICT CONSTRAINTS:
+    CRITICAL PRESENTATION & CLEANLINESS RULES:
+    - ABSOLUTE SEPARATION OF QUESTION & INSTRUCTION: Never merge instructions or options into 'question' or 'sentence'. Put instructions strictly in 'instruction'.
+    - STRICT PROHIBITION ON CODE TEXT: NEVER output any code tags, backticks, literal '\\n', markdown code blocks, JSON keys, or programming artifacts inside questions, sentences, instructions, or options.
     - STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Zero emojis!
     - Return exactly ${safeCount} questions.
     - All explanations in Traditional Chinese (繁體中文).
