@@ -49,10 +49,12 @@ export interface AnalyzedToken {
   jlpt: 'N5' | 'N4' | 'N3' | 'N2' | 'N1' | 'Unknown';
   type: 'VOCAB' | 'GRAMMAR';
   partOfSpeech?: string; // New field for listening analysis
-  // New fields for the Word Card feature
+  pitchAccent?: string;
+  // Fields for Word Card feature
   exampleSentence?: string;
   exampleReading?: string;
   exampleTranslation?: string;
+  examples?: WordExample[];
 }
 
 export interface ReadingMaterial {

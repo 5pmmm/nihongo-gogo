@@ -755,9 +755,24 @@ const readingSchema = {
           meaning: { type: Type.STRING, description: "Meaning in context (Traditional Chinese)" },
           type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] },
           jlpt: { type: Type.STRING, enum: ["N5", "N4", "N3", "N2", "N1", "Unknown"], description: "The JLPT level. Use N5 for basic/easy/everyday words, N4/N3 for intermediate, N2/N1 for advanced/hard words, and 'Unknown' specifically for proper nouns, place names, technical terminology, names, or brand terms." },
-          exampleSentence: { type: Type.STRING, description: "A short, natural example sentence using this token" },
-          exampleReading: { type: Type.STRING, description: "Hiragana reading of the example sentence" },
-          exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the example sentence" }
+          partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, い形容詞, な形容詞, 副詞, 句型" },
+          pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
+          exampleSentence: { type: Type.STRING, description: "Primary natural Japanese example sentence using this token" },
+          exampleReading: { type: Type.STRING, description: "Hiragana reading of the primary example sentence" },
+          exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the primary example sentence" },
+          examples: {
+            type: Type.ARRAY,
+            description: "1 to 2 natural Japanese example sentences with readings and Chinese translations",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                sentence: { type: Type.STRING, description: "Japanese example sentence" },
+                reading: { type: Type.STRING, description: "Hiragana reading of sentence" },
+                translation: { type: Type.STRING, description: "Traditional Chinese translation" }
+              },
+              required: ["sentence", "reading", "translation"]
+            }
+          }
         },
         required: ["text", "dictionaryForm", "reading", "meaning", "type", "jlpt", "exampleSentence", "exampleReading", "exampleTranslation"]
       }
@@ -923,7 +938,7 @@ export const analyzeReadingText = async (input: string): Promise<ReadingMaterial
       MANDATORY REQUIREMENTS:
       1. Provide a concise title and the full article content.
       2. Provide a complete, natural Traditional Chinese translation of the entire article text.
-      3. Extract key vocabulary (VOCAB) and grammar patterns (GRAMMAR) from this text with dictionary forms, Hiragana readings, contextual meanings, JLPT levels, and 1 example sentence each.
+      3. Extract key vocabulary (VOCAB) and grammar patterns (GRAMMAR) from this text with dictionary forms, Hiragana readings, pitch accents, parts of speech, contextual meanings, JLPT levels, and 1 to 2 natural Japanese example sentences each (including full sentence, Hiragana reading, and Traditional Chinese translation).
       4. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
       
       Response Language: Traditional Chinese (繁體中文).
