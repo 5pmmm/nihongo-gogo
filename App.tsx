@@ -101,7 +101,7 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-[#F8F9FA] text-[#2B303A] font-sans antialiased selection:bg-[#4F6375]/20 flex flex-col justify-between">
       {/* Top Navbar: 3 Tabs Only (解析, 測驗, 收藏) */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-xs border-b border-[#E9ECEF]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand */}
           <div 
             onClick={() => setMode(AppMode.PARSE)}
@@ -144,7 +144,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full flex-1">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full flex-1">
         <AnimatePresence mode="wait">
           {/* TAB 1: PARSE (字典三合一解析) */}
           {mode === AppMode.PARSE && (

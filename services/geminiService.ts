@@ -1158,6 +1158,7 @@ export interface DailyStudyQuizItem {
   term: string;
   summary?: string;
   detail?: string;
+  content?: string; // Full Japanese article text for READING items
 }
 
 /**
@@ -1170,9 +1171,15 @@ export const generateDailyStudyQuiz = async (
   questionCount: number = 10
 ): Promise<QuizQuestion[]> => {
   const safeCount = Math.max(3, Math.min(questionCount || 10, 15));
-  const itemsDescription = items.map((it, idx) => 
-    `${idx + 1}. [${it.type}] ${it.term}${it.summary ? ` (${it.summary})` : ''} ${it.detail ? `- ${it.detail}` : ''}`
-  ).join('\n');
+  const itemsDescription = items.map((it, idx) => {
+    let desc = `${idx + 1}. [${it.type}] ${it.term}${it.summary ? ` (${it.summary})` : ''}`;
+    if (it.content) {
+      desc += `\n   [FULL ARTICLE PASSAGE / 原文本文]:\n${it.content}`;
+    } else if (it.detail) {
+      desc += ` - ${it.detail}`;
+    }
+    return desc;
+  }).join('\n\n');
 
   const prompt = `
     You are an expert Japanese educator and exam creator for "日本語ごご！".
@@ -1183,28 +1190,38 @@ export const generateDailyStudyQuiz = async (
     TASK:
     Generate EXACTLY ${safeCount} focused questions testing DIRECTLY the items above.
     
-    QUESTION TYPES & STRICT FIELD SEPARATION:
-    1. 單字拆解題 (type: "vocab"):
+    CRITICAL QUESTION TYPES & STRICT FIELD SPECIFICATIONS:
+    1. 單字拆解題 / 字彙與文法用法題 (type: "vocab" or "grammar"):
        - 'instruction': "下線の言葉の用法や意味として最も適当なものを選びなさい。"
-       - 'question': Clean target Japanese sentence or term (e.g. "彼女の【約束】を守る姿勢に感動した。").
+       - 'question': A complete, natural Japanese sentence containing the target word or grammar, with the target word/grammar strictly enclosed in brackets like 【単語】 or 【文法】!
+       - MANDATORY CONSTRAINT: 'question' MUST be the actual Japanese sentence (e.g. "このアパートは駅から近い【し】、家賃も安い【し】、とても気に入っています。" or "彼には特別な【才能】がある。").
+       - FATAL ERROR PROHIBITION: NEVER set 'question' to "下線の言葉の用法や意味として最も適当なものを選びなさい。"! That is an instruction, NOT a question. If you do this, the user cannot see which word or sentence is being asked about! The instruction goes strictly in 'instruction', and the Japanese sentence goes strictly in 'question'.
+       - 'questionTranslation': Natural Traditional Chinese translation of the Japanese sentence.
+
     2. 拼音題 (type: "vocab"):
        - 'instruction': "下線部の漢字の正しい読み方（拼音）を選びなさい。"
-       - 'question': Clean target Japanese sentence with kanji target (e.g. "彼との【約束】を忘れてはいけない。").
+       - 'question': A complete, natural Japanese sentence with the target kanji enclosed in brackets 【 】, e.g. "彼との【約束】を忘れてはいけない。"
+       - 'questionTranslation': Natural Traditional Chinese translation of the Japanese sentence.
+
     3. 重組題（星號題）(type: "ordering"):
        - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
        - 'sentence': Clean sentence with context and underlines, e.g. "（駅の改札が混雑中なので、）①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。" (DO NOT include literal '\\n' or duplicate candidate blocks).
        - 'scrambleItems': Array of 4 clean string fragments (without numeric prefixes like 1. or trailing periods).
        - STRICT RULE: 4! = 24 unique valid solution. All other 23 permutations must be grammatically or logically invalid.
        - 'options' matching the 4 items, with 'correctAnswerIndex' pointing to the item in the ★ slot.
+
     4. 文章理解題 (type: "reading"):
        - 'instruction': "文章を読んで、次の問いに最も適した答えを選びなさい。"
-       - 'context': The Japanese reading passage.
-       - 'question': The comprehension question.
+       - 'context': The Japanese reading passage. (MANDATORY REQUIREMENT: You MUST provide the full Japanese reading passage here! If the student studied an article, copy that article or relevant paragraphs into 'context'. If no article was provided, create a vivid 3-5 sentence Japanese scenario/dialogue/short passage in 'context'. The student MUST have the passage to read before answering. NEVER return an empty 'context'!)
+       - 'question': The specific comprehension question about the passage (e.g. "筆者が新しいアパートを気に入っている理由として、文章で述べられていないものはどれですか。").
+       - 'questionTranslation': Natural Traditional Chinese translation of the question.
+
     5. 聽力/語音題 (type: "listening"):
        - 'instruction': "会話を聞いて、質問に最も適した答えを選びなさい。"
        - 'transcript': Clean Japanese dialogue without any HTML, XML, or SSML tags.
        - 'dialogueLines': Provided with speaker, text, and gender ("male" | "female").
        - 'question': The question about the dialogue.
+       - 'questionTranslation': Natural Traditional Chinese translation of the question.
 
     CRITICAL PRESENTATION & CLEANLINESS RULES:
     - ABSOLUTE SEPARATION OF QUESTION & INSTRUCTION: Never merge instructions or options into 'question' or 'sentence'. Put instructions strictly in 'instruction'.

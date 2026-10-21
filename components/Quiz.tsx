@@ -14,6 +14,7 @@ import {
   parseListeningDialogue,
   cleanSpeakerDialogue,
   CleanDialogueLine,
+  renderQuestionSentence,
 } from '../utils/quizFormatter';
 
 interface QuizProps {
@@ -39,10 +40,11 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
   const [selectedReviewIndex, setSelectedReviewIndex] = useState<number | null>(null);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'wrong'>('all');
 
-  // Audio Playback for Listening
+  // Audio Playback for Listening & Reading
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [showScript, setShowScript] = useState<boolean>(false);
   const playSessionRef = useRef<number>(0);
+  const articlePassagesRef = useRef<{ [key: string]: string }>({});
 
   // Load today's records on mount
   useEffect(() => {
@@ -106,21 +108,52 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
     setLoading(true);
     setErrorMessage(null);
 
+    // Save article passages for rescue
+    const passages: { [key: string]: string } = {};
+    chosenItems.forEach(item => {
+      if (item.type === 'READING') {
+        const c = (item.data as any)?.content || (typeof item.data === 'string' ? item.data : '');
+        if (c) {
+          passages[item.term] = c;
+          passages['default'] = c;
+        }
+      }
+    });
+    articlePassagesRef.current = passages;
+
     try {
-      const requestItems: DailyStudyQuizItem[] = chosenItems.map(item => ({
-        type: item.type,
-        term: item.term,
-        summary: item.summary,
-        detail: typeof item.data === 'object' ? JSON.stringify(item.data).slice(0, 200) : ''
-      }));
+      const requestItems: DailyStudyQuizItem[] = chosenItems.map(item => {
+        let content = '';
+        if (item.type === 'READING') {
+          content = (item.data as any)?.content || (typeof item.data === 'string' ? item.data : '');
+        }
+        return {
+          type: item.type,
+          term: item.term,
+          summary: item.summary,
+          content: content || undefined,
+          detail: typeof item.data === 'object' ? JSON.stringify(item.data).slice(0, 400) : ''
+        };
+      });
 
       const generated = await generateDailyStudyQuiz(requestItems, questionCount);
       if (!generated || generated.length === 0) {
         throw new Error('未取得有效題目');
       }
 
-      setQuestions(generated);
-      setUserAnswers(new Array(generated.length).fill(null));
+      // If reading question has missing context, rescue with studied article passage
+      const patched = generated.map(q => {
+        if ((q.type === 'reading' || q.instruction?.includes('文章を読んで')) && (!q.context || q.context.trim() === '')) {
+          const fallback = passages['default'] || '';
+          if (fallback) {
+            return { ...q, context: fallback };
+          }
+        }
+        return q;
+      });
+
+      setQuestions(patched);
+      setUserAnswers(new Array(patched.length).fill(null));
       setCurrentIndex(0);
       setIsFinished(false);
       setIsStarted(true);
@@ -223,6 +256,22 @@ const cleanOptionText = (text: string) => {
     setIsPlayingAudio(false);
   };
 
+  const playArticleSpeech = (text: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    playSessionRef.current++;
+    setIsPlayingAudio(true);
+    const { female, male } = getJaVoices();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ja-JP';
+    utterance.rate = 0.9;
+    if (female) utterance.voice = female;
+    else if (male) utterance.voice = male;
+    utterance.onend = () => setIsPlayingAudio(false);
+    utterance.onerror = () => setIsPlayingAudio(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
   // Answer selection (直接記錄作答，加快順暢度，不在每題中途揭露答案或解析)
   const handleSelectOption = (optionIndex: number) => {
     stopListeningAudio();
@@ -304,7 +353,7 @@ const cleanOptionText = (text: string) => {
   // ==========================================
   if (!isStarted) {
     return (
-      <div className="w-full max-w-3xl mx-auto space-y-6">
+      <div className="w-full max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-7 space-y-3 shadow-xs">
           <div className="flex items-center justify-between gap-4">
@@ -514,7 +563,7 @@ const cleanOptionText = (text: string) => {
     });
 
     return (
-      <div className="w-full max-w-3xl mx-auto space-y-6">
+      <div className="w-full max-w-5xl mx-auto space-y-6">
         {/* Result Summary Card */}
         <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xs">
           <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#4F6375]/10 text-[#3D4F5F] text-xs font-bold">
@@ -596,14 +645,19 @@ const cleanOptionText = (text: string) => {
             const userAns = userAnswers[idx];
             const correctAns = q.correctAnswerIndex ?? q.answer ?? 0;
             const isCorrect = userAns === correctAns;
-            const fq = formatQuestionDisplay(q);
+            const fq = formatQuestionDisplay({
+              ...q,
+              explanation: q.explanation,
+              options: q.options,
+            });
             const isReviewOrdering = fq.isOrdering;
             const isReviewListening = q.type === 'listening' || q.subType === 'listening';
+            const isReviewReading = q.type === 'reading' || fq.subTypeLabel === '文章理解題';
 
             return (
               <div
                 key={q.id || idx}
-                className={`bg-white border rounded-2xl p-5 sm:p-6 transition-all space-y-4 ${
+                className={`bg-white border rounded-2xl p-5 sm:p-7 transition-all space-y-4 shadow-xs ${
                   isCorrect ? 'border-[#E9ECEF]' : 'border-[#8B4848]/30 bg-[#8B4848]/2'
                 }`}
               >
@@ -638,11 +692,30 @@ const cleanOptionText = (text: string) => {
                   </div>
                 )}
 
+                {/* Reading passage in review view */}
+                {isReviewReading && q.context && (
+                  <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#4F6375]">文章閱讀本文：</span>
+                      <button
+                        type="button"
+                        onClick={() => isPlayingAudio ? stopListeningAudio() : playArticleSpeech(q.context || '')}
+                        className="text-xs text-[#4F6375] hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        {isPlayingAudio ? '停止朗讀' : '朗讀短文'}
+                      </button>
+                    </div>
+                    <p className="text-sm font-jp text-[#2B303A] leading-relaxed whitespace-pre-wrap select-text">
+                      {stripCodeArtifacts(q.context)}
+                    </p>
+                  </div>
+                )}
+
                 {/* Question body */}
                 {isReviewOrdering ? (
                   <div className="space-y-3">
                     <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-[17px] font-bold text-[#2B303A] font-jp leading-relaxed">
-                      {fq.mainQuestion}
+                      {renderQuestionSentence(fq.mainQuestion)}
                     </div>
 
                     {fq.scrambleItems && fq.scrambleItems.length > 0 && (
@@ -665,7 +738,7 @@ const cleanOptionText = (text: string) => {
                 ) : (
                   <div className="space-y-1.5">
                     <h4 className="text-[17px] sm:text-[18px] font-bold text-[#2B303A] font-jp leading-relaxed">
-                      {fq.mainQuestion}
+                      {renderQuestionSentence(fq.mainQuestion)}
                     </h4>
                     {fq.translation && (
                       <p className="text-xs sm:text-sm text-[#6C757D]">{fq.translation}</p>
@@ -762,12 +835,323 @@ const cleanOptionText = (text: string) => {
   }
 
   // ==========================================
-  // VIEW 3: ACTIVE QUIZ RUNNER (答題流暢度優化)
+  // VIEW 3: ACTIVE QUIZ RUNNER (答題流暢度與寬度版面優化)
   // ==========================================
   const userSelectedOption = userAnswers[currentIndex];
+  const formattedQ = formatQuestionDisplay({
+    ...currentQ,
+    explanation: currentQ?.explanation,
+    options: currentQ?.options,
+  });
 
+  // 判斷是否為閱讀理解題（文章題）
+  const isReadingQuestion =
+    formattedQ.subTypeLabel === '文章理解題' ||
+    currentQ?.type === 'reading' ||
+    Boolean(currentQ?.context && currentQ.context.length > 40 && !isListening);
+
+  // 取得閱讀文章本文（若題幹 context 為空，則自動以當日學習文章救援）
+  const readingPassage =
+    currentQ?.context?.trim() || articlePassagesRef.current['default'] || '';
+
+  // 渲染標準題目作答卡片本體
+  const renderQuestionCardBody = () => (
+    <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
+      {/* Type Badge & Instruction Row (提示字樣依層級下修，獨立成行，與題目分開斷行) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F3F5] pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-[#4F6375]/10 text-[#3D4F5F]">
+            {formattedQ.subTypeLabel}
+          </span>
+
+          {/* Subordinate Action Hint / Instruction (依層級下修，輔助小字，清晰獨立) */}
+          {formattedQ.instruction && (
+            <div className="text-xs text-[#6C757D] font-medium flex items-center gap-1.5 pl-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CED4DA] shrink-0" />
+              <span>{formattedQ.instruction}</span>
+            </div>
+          )}
+        </div>
+
+        {formattedQ.readingGuide && (
+          <span className="text-xs text-[#868E96] font-jp hidden sm:inline">
+            {formattedQ.readingGuide}
+          </span>
+        )}
+      </div>
+
+      {/* LISTENING QUESTION SECTION (純淨男女聲對話，不念「男」「女」標籤) */}
+      {isListening && (
+        <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[#4F6375]">
+              對話語音聆聽
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowScript(!showScript)}
+              className="text-xs text-[#6C757D] hover:text-[#2B303A] underline cursor-pointer"
+            >
+              {showScript ? '隱藏原文' : '查看對話原文'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => isPlayingAudio ? stopListeningAudio() : playListeningAudio(currentQ)}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all cursor-pointer flex items-center gap-2 active:scale-[0.98] ${
+                isPlayingAudio ? 'bg-[#8B4848]' : 'bg-[#4F6375] hover:bg-[#3D4F5F]'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                {isPlayingAudio ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                )}
+              </svg>
+              <span>{isPlayingAudio ? '停止播放' : '播放對話語音 (男女聲純淨對話)'}</span>
+            </button>
+          </div>
+
+          {showScript && (
+            <div className="p-3 bg-white border border-[#E9ECEF] rounded-lg text-xs sm:text-sm text-[#2B303A] whitespace-pre-wrap font-jp leading-relaxed">
+              {parseListeningDialogue(currentQ).map((turn, tIdx) => (
+                <div key={tIdx} className="py-0.5">
+                  <span className="font-bold text-[#6C757D] mr-2">
+                    {turn.gender === 'male' ? '男' : '女'}：
+                  </span>
+                  <span>{turn.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ORDERING (星號重組題) SECTION */}
+      {formattedQ.isOrdering ? (
+        <div className="space-y-4">
+          {/* Preceding context if present */}
+          {formattedQ.precedingContext && (
+            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
+              {formattedQ.precedingContext}
+            </div>
+          )}
+
+          {/* Template Sentence with underlines */}
+          <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-[17px] sm:text-[18px] font-bold text-[#2B303A] font-jp tracking-wide leading-loose">
+            {renderQuestionSentence(formattedQ.mainQuestion)}
+          </div>
+
+          {/* 4 Candidate Word Blocks */}
+          {formattedQ.scrambleItems && formattedQ.scrambleItems.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="text-xs text-[#6C757D] font-medium">
+                待排序單字：
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {formattedQ.scrambleItems.map((item, sIdx) => (
+                  <div
+                    key={sIdx}
+                    className="p-2.5 rounded-lg bg-white border border-[#CED4DA] text-center text-sm font-bold text-[#2B303A] font-jp shadow-2xs"
+                  >
+                    <span className="text-xs text-[#6C757D] mr-1.5">{sIdx + 1}.</span>
+                    <span>{cleanOptionText(item)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* STANDARD QUESTION TEXT (文字拼音、語彙、文法，主體獨立成行，劃線處清晰標記) */
+        <div className="space-y-2">
+          {formattedQ.precedingContext && (
+            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
+              {formattedQ.precedingContext}
+            </div>
+          )}
+
+          <h3 className="text-[18px] sm:text-[20px] font-bold text-[#2B303A] font-jp leading-relaxed">
+            {renderQuestionSentence(formattedQ.mainQuestion)}
+          </h3>
+
+          {formattedQ.translation && (
+            <p className="text-xs sm:text-sm text-[#6C757D]">
+              {formattedQ.translation}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 4 Options Grid (作答階段不洩漏正解與解析，加快流暢節奏) */}
+      <div className="space-y-2.5 pt-2">
+        {currentQ.options.map((opt, optIdx) => {
+          const isChosen = userSelectedOption === optIdx;
+
+          const btnStyle = isChosen
+            ? 'bg-[#2B303A] border-[#2B303A] text-white font-bold shadow-xs'
+            : 'bg-white border-[#E9ECEF] text-[#2B303A] hover:border-[#CED4DA] hover:bg-[#F8F9FA]';
+
+          return (
+            <button
+              key={optIdx}
+              type="button"
+              onClick={() => handleSelectOption(optIdx)}
+              className={`w-full p-3.5 sm:p-4 rounded-xl border text-left text-sm sm:text-base transition-all flex items-center justify-between cursor-pointer font-jp active:scale-[0.99] ${btnStyle}`}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={`w-6 h-6 rounded-md text-xs font-bold flex items-center justify-center shrink-0 ${
+                    isChosen ? 'bg-white/20 text-white' : 'bg-[#F1F3F5] text-[#495057]'
+                  }`}
+                >
+                  {optIdx + 1}
+                </span>
+                <span>{cleanOptionText(opt)}</span>
+              </div>
+
+              {isChosen && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/20 text-white">
+                  已選取
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Navigation & Controls Bar (作答流暢性：上一題、題號導航、下一題/交卷) */}
+      <div className="flex items-center justify-between pt-4 border-t border-[#F1F3F5] gap-3">
+        <button
+          type="button"
+          onClick={handlePrevQuestion}
+          disabled={currentIndex === 0}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium border transition-all cursor-pointer shrink-0 ${
+            currentIndex === 0
+              ? 'opacity-40 cursor-not-allowed border-[#E9ECEF] text-[#ADB5BD]'
+              : 'border-[#E9ECEF] text-[#495057] hover:bg-[#F8F9FA] active:scale-[0.98]'
+          }`}
+        >
+          上一題
+        </button>
+
+        {/* Question Navigator Dots (寬裕間距，支援水平滾動，避免擠壓) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-2 px-1 max-w-[280px] sm:max-w-md md:max-w-xl scrollbar-none">
+          {questions.map((_, qIdx) => {
+            const isCurrent = qIdx === currentIndex;
+            const isAnswered = userAnswers[qIdx] !== null;
+            return (
+              <button
+                key={qIdx}
+                type="button"
+                onClick={() => {
+                  stopListeningAudio();
+                  setShowScript(false);
+                  setCurrentIndex(qIdx);
+                }}
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                  isCurrent
+                    ? 'bg-[#2B303A] text-white ring-2 ring-[#2B303A]/20 scale-105 shadow-xs'
+                    : isAnswered
+                    ? 'bg-[#4F6375]/15 text-[#3D4F5F] font-semibold hover:bg-[#4F6375]/25'
+                    : 'bg-[#F1F3F5] text-[#868E96] hover:bg-[#E9ECEF]'
+                }`}
+              >
+                {qIdx + 1}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNextQuestion}
+          className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#2B303A] text-white hover:bg-[#1E222A] transition-all cursor-pointer active:scale-[0.98] shadow-xs flex items-center gap-1.5 shrink-0"
+        >
+          <span>{currentIndex + 1 < questions.length ? '下一題' : '交卷查看解析'}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+
+  // 若為文章理解題，呈現左右分欄 (Desktop Side-by-Side Split View)，避免未出現文章的錯誤
+  if (isReadingQuestion && readingPassage) {
+    return (
+      <div className="w-full max-w-7xl mx-auto space-y-6">
+        {/* Top Header / Progress */}
+        <div className="bg-white border border-[#E9ECEF] rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRestartLobby}
+              className="text-xs text-[#6C757D] hover:text-[#2B303A] px-2.5 py-1 rounded border border-[#E9ECEF] hover:bg-[#F8F9FA] transition-colors cursor-pointer"
+            >
+              結束測驗
+            </button>
+            <div className="text-sm font-bold text-[#2B303A]">
+              題目 {currentIndex + 1} / {questions.length} (文章閱讀理解)
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-32 sm:w-48 bg-[#F1F3F5] h-2 rounded-full overflow-hidden">
+            <div
+              className="bg-[#4F6375] h-full transition-all duration-300 rounded-full"
+              style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* 雙欄響應式佈局：左側（或上方）為閱讀短文專區，右側為題目作答區 */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+          {/* 左欄：專屬文章閱讀卡片 */}
+          <div className="lg:col-span-6 bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 space-y-4 shadow-xs lg:sticky lg:top-20 max-h-[calc(100vh-8rem)] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#F1F3F5]">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-[#5A6959]/15 text-[#354334]">
+                  閱讀文章 (本文)
+                </span>
+                <span className="text-xs text-[#6C757D] hidden sm:inline">
+                  請先詳讀本文後再於右側作答
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => isPlayingAudio ? stopListeningAudio() : playArticleSpeech(readingPassage)}
+                className="text-xs text-[#4F6375] hover:text-[#3D4F5F] font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[#F1F3F5] transition-colors cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-3.5 h-3.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+                <span>{isPlayingAudio ? '停止朗讀' : '朗讀文章'}</span>
+              </button>
+            </div>
+
+            {/* 日文文章全文 */}
+            <div className="text-[16px] sm:text-[17px] font-jp text-[#2B303A] leading-[2.1] whitespace-pre-wrap select-text selection:bg-[#4F6375]/20">
+              {stripCodeArtifacts(readingPassage)}
+            </div>
+          </div>
+
+          {/* 右欄：題目與選項卡片 */}
+          <div className="lg:col-span-6 space-y-6">
+            {renderQuestionCardBody()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 標準題目（單字、拼音、文法、聽力、重組）寬幅佈局
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-6">
+    <div className="w-full max-w-5xl mx-auto space-y-6">
       {/* Top Header / Progress */}
       <div className="bg-white border border-[#E9ECEF] rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 shadow-xs">
         <div className="flex items-center gap-3">
@@ -793,240 +1177,7 @@ const cleanOptionText = (text: string) => {
       </div>
 
       {/* Main Question Card */}
-      {(() => {
-        const formattedQ = formatQuestionDisplay(currentQ);
-        return (
-          <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
-            {/* Type Badge & Instruction Row (提示字樣依層級下修，獨立成行，與題目分開斷行) */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F3F5] pb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-[#4F6375]/10 text-[#3D4F5F]">
-                  {formattedQ.subTypeLabel}
-                </span>
-
-                {/* Subordinate Action Hint / Instruction (依層級下修，輔助小字，清晰獨立) */}
-                {formattedQ.instruction && (
-                  <div className="text-xs text-[#6C757D] font-medium flex items-center gap-1.5 pl-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#CED4DA] shrink-0" />
-                    <span>{formattedQ.instruction}</span>
-                  </div>
-                )}
-              </div>
-
-              {formattedQ.readingGuide && (
-                <span className="text-xs text-[#868E96] font-jp hidden sm:inline">
-                  {formattedQ.readingGuide}
-                </span>
-              )}
-            </div>
-
-            {/* LISTENING QUESTION SECTION (純淨男女聲對話，不念「男」「女」標籤) */}
-            {isListening && (
-              <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#4F6375]">
-                    對話語音聆聽
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowScript(!showScript)}
-                    className="text-xs text-[#6C757D] hover:text-[#2B303A] underline cursor-pointer"
-                  >
-                    {showScript ? '隱藏原文' : '查看對話原文'}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => isPlayingAudio ? stopListeningAudio() : playListeningAudio(currentQ)}
-                    className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all cursor-pointer flex items-center gap-2 active:scale-[0.98] ${
-                      isPlayingAudio ? 'bg-[#8B4848]' : 'bg-[#4F6375] hover:bg-[#3D4F5F]'
-                    }`}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                      {isPlayingAudio ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-                      )}
-                    </svg>
-                    <span>{isPlayingAudio ? '停止播放' : '播放對話語音 (男女聲純淨對話)'}</span>
-                  </button>
-                </div>
-
-                {showScript && (
-                  <div className="p-3 bg-white border border-[#E9ECEF] rounded-lg text-xs sm:text-sm text-[#2B303A] whitespace-pre-wrap font-jp leading-relaxed">
-                    {parseListeningDialogue(currentQ).map((turn, tIdx) => (
-                      <div key={tIdx} className="py-0.5">
-                        <span className="font-bold text-[#6C757D] mr-2">
-                          {turn.gender === 'male' ? '男' : '女'}：
-                        </span>
-                        <span>{turn.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* READING QUESTION SECTION */}
-            {isReading && currentQ.context && (
-              <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-sm sm:text-base text-[#2B303A] font-jp leading-relaxed whitespace-pre-wrap">
-                {stripCodeArtifacts(currentQ.context)}
-              </div>
-            )}
-
-            {/* ORDERING (星號重組題) SECTION */}
-            {formattedQ.isOrdering ? (
-              <div className="space-y-4">
-                {/* Preceding context if present */}
-                {formattedQ.precedingContext && (
-                  <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
-                    {formattedQ.precedingContext}
-                  </div>
-                )}
-
-                {/* Template Sentence with underlines */}
-                <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-[17px] sm:text-[18px] font-bold text-[#2B303A] font-jp tracking-wide leading-loose">
-                  {formattedQ.mainQuestion}
-                </div>
-
-                {/* 4 Candidate Word Blocks */}
-                {formattedQ.scrambleItems && formattedQ.scrambleItems.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="text-xs text-[#6C757D] font-medium">
-                      待排序單字：
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {formattedQ.scrambleItems.map((item, sIdx) => (
-                        <div
-                          key={sIdx}
-                          className="p-2.5 rounded-lg bg-white border border-[#CED4DA] text-center text-sm font-bold text-[#2B303A] font-jp shadow-2xs"
-                        >
-                          <span className="text-xs text-[#6C757D] mr-1.5">{sIdx + 1}.</span>
-                          <span>{cleanOptionText(item)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* STANDARD QUESTION TEXT (文字拼音、語彙、文法，主體獨立成行，乾淨無程式碼) */
-              <div className="space-y-2">
-                {formattedQ.precedingContext && (
-                  <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
-                    {formattedQ.precedingContext}
-                  </div>
-                )}
-
-                <h3 className="text-[18px] sm:text-[20px] font-bold text-[#2B303A] font-jp leading-relaxed">
-                  {formattedQ.mainQuestion}
-                </h3>
-
-                {formattedQ.translation && (
-                  <p className="text-xs sm:text-sm text-[#6C757D]">
-                    {formattedQ.translation}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* 4 Options Grid (作答階段不洩漏正解與解析，加快流暢節奏) */}
-            <div className="space-y-2.5 pt-2">
-              {currentQ.options.map((opt, optIdx) => {
-                const isChosen = userSelectedOption === optIdx;
-
-                const btnStyle = isChosen
-                  ? 'bg-[#2B303A] border-[#2B303A] text-white font-bold shadow-xs'
-                  : 'bg-white border-[#E9ECEF] text-[#2B303A] hover:border-[#CED4DA] hover:bg-[#F8F9FA]';
-
-                return (
-                  <button
-                    key={optIdx}
-                    type="button"
-                    onClick={() => handleSelectOption(optIdx)}
-                    className={`w-full p-3.5 sm:p-4 rounded-xl border text-left text-sm sm:text-base transition-all flex items-center justify-between cursor-pointer font-jp active:scale-[0.99] ${btnStyle}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-6 h-6 rounded-md text-xs font-bold flex items-center justify-center shrink-0 ${
-                          isChosen ? 'bg-white/20 text-white' : 'bg-[#F1F3F5] text-[#495057]'
-                        }`}
-                      >
-                        {optIdx + 1}
-                      </span>
-                      <span>{cleanOptionText(opt)}</span>
-                    </div>
-
-                    {isChosen && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/20 text-white">
-                        已選取
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Navigation & Controls Bar (作答流暢性：上一題、題號導航、下一題/交卷) */}
-            <div className="flex items-center justify-between pt-4 border-t border-[#F1F3F5] gap-3">
-              <button
-                type="button"
-                onClick={handlePrevQuestion}
-                disabled={currentIndex === 0}
-                className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium border transition-all cursor-pointer ${
-                  currentIndex === 0
-                    ? 'opacity-40 cursor-not-allowed border-[#E9ECEF] text-[#ADB5BD]'
-                    : 'border-[#E9ECEF] text-[#495057] hover:bg-[#F8F9FA] active:scale-[0.98]'
-                }`}
-              >
-                上一題
-              </button>
-
-              {/* Question Navigator Dots */}
-              <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto py-1">
-                {questions.map((_, qIdx) => {
-                  const isCurrent = qIdx === currentIndex;
-                  const isAnswered = userAnswers[qIdx] !== null;
-                  return (
-                    <button
-                      key={qIdx}
-                      type="button"
-                      onClick={() => {
-                        stopListeningAudio();
-                        setShowScript(false);
-                        setCurrentIndex(qIdx);
-                      }}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                        isCurrent
-                          ? 'bg-[#2B303A] text-white ring-2 ring-[#2B303A]/20'
-                          : isAnswered
-                          ? 'bg-[#4F6375]/15 text-[#3D4F5F] font-semibold'
-                          : 'bg-[#F1F3F5] text-[#868E96] hover:bg-[#E9ECEF]'
-                      }`}
-                    >
-                      {qIdx + 1}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={handleNextQuestion}
-                className="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#2B303A] text-white hover:bg-[#1E222A] transition-all cursor-pointer active:scale-[0.98] shadow-xs flex items-center gap-1.5"
-              >
-                <span>{currentIndex + 1 < questions.length ? '下一題' : '交卷查看解析'}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+      {renderQuestionCardBody()}
     </div>
   );
 };
