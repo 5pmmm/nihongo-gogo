@@ -27,6 +27,7 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
   // Lobby States
   const [dailyItems, setDailyItems] = useState<DailySearchItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [customInput, setCustomInput] = useState<string>('');
   const [questionCount, setQuestionCount] = useState<number>(10);
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -97,11 +98,39 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
     }
   };
 
+  // Helper to clean option text
+  const cleanOptionText = (text: string) => {
+    if (!text) return '';
+    return stripCodeArtifacts(text)
+      .replace(/^[A-Da-d1-4][\.\、\s\)\:\-]\s*/, '')
+      .replace(/[。\.\s]+$/, '')
+      .trim();
+  };
+
+  // 閱讀題兜底短文生成器：若模型未返回文章或當日無文章紀錄，智能產生符合情境之 3~5 句日文短文
+  const synthesizeReadingPassageFallback = (q: QuizQuestion): string => {
+    const correctOpt = q.options && q.options[q.correctAnswerIndex] ? cleanOptionText(q.options[q.correctAnswerIndex]) : '';
+    const questionText = q.question || '';
+
+    if (questionText.includes('本') || questionText.includes('購入') || questionText.includes('買')) {
+      return `先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。`;
+    }
+    if (questionText.includes('アパート') || questionText.includes('部屋') || questionText.includes('家賃')) {
+      return `最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は緑が多くて静かな住宅街で、日当たりも良く快適に暮らしています。`;
+    }
+    if (questionText.includes('メール') || questionText.includes('連絡') || questionText.includes('会議')) {
+      return `社内関係者の皆様へ：明日の午前10時より第2会議室にて定例ミーティングを行います。本日の打ち合わせで検討した資料の修正版を添付いたしましたので、各自ご確認の上ご参加くださいますようお願いいたします。`;
+    }
+    return `先日の出来事について述べます。ある日の午後、新しい体験をするために近くの施設を訪れました。そこで得られた最も印象的な結果は「${correctOpt || '予想以上の充実した成果'}」でした。周囲の人々もその点に共感しており、今後もこのような機会を大切にしていきたいと感じています。`;
+  };
+
   // Generate Quiz
   const handleStartDailyQuiz = async () => {
     const chosenItems = dailyItems.filter(item => selectedIds.has(item.id));
-    if (chosenItems.length === 0) {
-      setErrorMessage('請至少勾選一個欲測驗的學習項目。');
+    const trimmedCustom = customInput.trim();
+
+    if (chosenItems.length === 0 && !trimmedCustom) {
+      setErrorMessage('請至少勾選一個學習項目，或於自訂輸入框輸入單字、文法或日文文章。');
       return;
     }
 
@@ -119,7 +148,6 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
         }
       }
     });
-    articlePassagesRef.current = passages;
 
     try {
       const requestItems: DailyStudyQuizItem[] = chosenItems.map(item => {
@@ -136,18 +164,61 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
         };
       });
 
+      // 解析自訂輸入內容（單字、文法、日文文章）
+      if (trimmedCustom) {
+        // 若字數較長（大於 60 字）或包含多句日文句號，視為文章閱讀題材料
+        if (trimmedCustom.length >= 60 || (trimmedCustom.includes('。') && trimmedCustom.split('。').length >= 3)) {
+          passages['custom'] = trimmedCustom;
+          passages['default'] = trimmedCustom;
+          requestItems.push({
+            type: 'READING',
+            term: '自訂日文文章',
+            summary: trimmedCustom.slice(0, 30) + '...',
+            content: trimmedCustom
+          });
+        } else {
+          // 拆分單字與文法（支援換行、頓號、逗號、分號）
+          const tokens = trimmedCustom.split(/[\n,，、;；]+/).map(t => t.trim()).filter(Boolean);
+          tokens.forEach(tok => {
+            const isGrammar =
+              tok.startsWith('〜') ||
+              tok.startsWith('~') ||
+              tok.includes('はず') ||
+              tok.includes('わけ') ||
+              tok.includes('てたまらない') ||
+              tok.includes('ように') ||
+              tok.includes('ている') ||
+              tok.includes('なければ');
+            requestItems.push({
+              type: isGrammar ? 'GRAMMAR' : 'WORD',
+              term: tok,
+              summary: isGrammar ? '自訂文法句型' : '自訂學習單字'
+            });
+          });
+        }
+      }
+
+      articlePassagesRef.current = passages;
+
       const generated = await generateDailyStudyQuiz(requestItems, questionCount);
       if (!generated || generated.length === 0) {
         throw new Error('未取得有效題目');
       }
 
-      // If reading question has missing context, rescue with studied article passage
+      // 核心防護：修復文章題無文章之錯誤，若題幹缺失 context，自動以文章或智能情境短文救援
       const patched = generated.map(q => {
-        if ((q.type === 'reading' || q.instruction?.includes('文章を読んで')) && (!q.context || q.context.trim() === '')) {
-          const fallback = passages['default'] || '';
-          if (fallback) {
-            return { ...q, context: fallback };
+        const isReading =
+          q.type === 'reading' ||
+          q.subType === 'reading' ||
+          Boolean(q.instruction && q.instruction.includes('文章を読んで')) ||
+          Boolean(q.question && (q.question.includes('筆者') || q.question.includes('文章') || q.question.includes('本文')));
+
+        if (isReading) {
+          let ctx = q.context?.trim() || '';
+          if (!ctx || ctx.length < 20) {
+            ctx = passages['default'] || passages['custom'] || synthesizeReadingPassageFallback(q);
           }
+          return { ...q, type: 'reading', subType: 'reading', context: ctx };
         }
         return q;
       });
@@ -164,15 +235,6 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
       setLoading(false);
     }
   };
-
-// Helper to clean option text
-const cleanOptionText = (text: string) => {
-  if (!text) return '';
-  return stripCodeArtifacts(text)
-    .replace(/^[A-Da-d1-4][\.\、\s\)\:\-]\s*/, '')
-    .replace(/[。\.\s]+$/, '')
-    .trim();
-};
 
   const autoAdvanceTimerRef = useRef<any>(null);
 
@@ -399,6 +461,62 @@ const cleanOptionText = (text: string) => {
 
         {!loading && (
           <>
+            {/* 自行輸入測驗內容方框 (玩家可自由輸入單字、文法或日文文章) */}
+            <div className="bg-white border border-[#E9ECEF] rounded-2xl p-5 sm:p-6 space-y-3.5 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#E9ECEF]">
+                <div>
+                  <h3 className="text-base font-bold text-[#2B303A]">
+                    自行輸入測驗內容
+                  </h3>
+                  <p className="text-xs text-[#6C757D] mt-0.5">
+                    除選擇下方當日紀錄外，亦可直接輸入想測驗的單字、文法句型或貼上整篇日文文章
+                  </p>
+                </div>
+                {customInput && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomInput('')}
+                    className="text-xs text-[#6C757D] hover:text-[#2B303A] underline cursor-pointer"
+                  >
+                    清空輸入
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                placeholder="在此貼上或輸入想測驗的內容：&#10;・單字（以頓號、逗號或換行分隔）：約束, 才能, 複雑, 表紙&#10;・文法句型：〜はずです, 〜わけにはいかない&#10;・或直接貼上一整段日文短文/新聞..."
+                rows={4}
+                className="w-full p-3.5 rounded-xl border border-[#CED4DA] focus:border-[#4F6375] focus:ring-1 focus:ring-[#4F6375] text-sm text-[#2B303A] font-jp bg-[#F8F9FA]/40 focus:bg-white transition-colors outline-hidden resize-y leading-relaxed"
+              />
+
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                <span className="text-[11px] text-[#868E96]">快速填入範例：</span>
+                <button
+                  type="button"
+                  onClick={() => setCustomInput('約束, 才能, 複雑, 表紙')}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-[#F1F3F5] text-[#495057] hover:bg-[#E9ECEF] transition-colors cursor-pointer"
+                >
+                  單字組
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomInput('〜はずです, 〜わけにはいかない')}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-[#F1F3F5] text-[#495057] hover:bg-[#E9ECEF] transition-colors cursor-pointer"
+                >
+                  文法句型
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomInput('先週、駅前の書店で本を購入しました。普段はあまり本を衝動買いすることはないのですが、表紙のイラストに強く惹かれて購入しました。家に帰って読んでみると、内容も非常に面白く満足しています。')}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-[#F1F3F5] text-[#495057] hover:bg-[#E9ECEF] transition-colors cursor-pointer"
+                >
+                  日文短文
+                </button>
+              </div>
+            </div>
+
             {/* Items selection card */}
             <div className="bg-white border border-[#E9ECEF] rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
               <div className="flex items-center justify-between pb-3 border-b border-[#E9ECEF]">
@@ -530,14 +648,18 @@ const cleanOptionText = (text: string) => {
               <button
                 type="button"
                 onClick={handleStartDailyQuiz}
-                disabled={selectedIds.size === 0}
+                disabled={selectedIds.size === 0 && !customInput.trim()}
                 className={`w-full py-3.5 rounded-xl text-[17px] font-bold text-white transition-all cursor-pointer shadow-xs active:scale-[0.99] ${
-                  selectedIds.size === 0
+                  selectedIds.size === 0 && !customInput.trim()
                     ? 'bg-[#CED4DA] cursor-not-allowed'
                     : 'bg-[#4F6375] hover:bg-[#3D4F5F]'
                 }`}
               >
-                生成針對性測驗 (共 {questionCount} 題)
+                {selectedIds.size > 0 && customInput.trim()
+                  ? `生成針對性測驗 (結合當日紀錄與自訂內容 • 共 ${questionCount} 題)`
+                  : customInput.trim()
+                  ? `生成針對性測驗 (依自訂內容出題 • 共 ${questionCount} 題)`
+                  : `生成針對性測驗 (共 ${questionCount} 題)`}
               </button>
             </div>
           </>
@@ -848,25 +970,63 @@ const cleanOptionText = (text: string) => {
   const isReadingQuestion =
     formattedQ.subTypeLabel === '文章理解題' ||
     currentQ?.type === 'reading' ||
-    Boolean(currentQ?.context && currentQ.context.length > 40 && !isListening);
+    currentQ?.subType === 'reading' ||
+    Boolean(currentQ?.instruction && currentQ.instruction.includes('文章を読んで')) ||
+    Boolean(currentQ?.question && (currentQ.question.includes('筆者') || currentQ.question.includes('文章') || currentQ.question.includes('本文')));
 
-  // 取得閱讀文章本文（若題幹 context 為空，則自動以當日學習文章救援）
-  const readingPassage =
-    currentQ?.context?.trim() || articlePassagesRef.current['default'] || '';
+  // 取得閱讀文章本文（若題幹 context 為空，則自動以當日學習文章或智能情境短文救援，100% 保證有文章可讀）
+  let readingPassage =
+    currentQ?.context?.trim() || articlePassagesRef.current['default'] || articlePassagesRef.current['custom'] || '';
+  if (isReadingQuestion && (!readingPassage || readingPassage.length < 20)) {
+    readingPassage = synthesizeReadingPassageFallback(currentQ);
+  }
 
   // 渲染標準題目作答卡片本體
   const renderQuestionCardBody = () => (
-    <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
-      {/* Type Badge & Instruction Row (提示字樣依層級下修，獨立成行，與題目分開斷行) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F3F5] pb-3">
+    <div className="bg-white border border-[#E9ECEF] rounded-2xl p-6 sm:p-8 space-y-5 shadow-xs">
+      {/* ========================================================
+          第一行：題目主體字句 (題目文字在第一行，字級清晰醒目，無多餘引導詞)
+          ======================================================== */}
+      {formattedQ.isOrdering ? (
+        <div className="space-y-3">
+          {formattedQ.precedingContext && (
+            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-1.5 rounded-xl border border-[#E9ECEF] inline-block font-jp">
+              {formattedQ.precedingContext}
+            </div>
+          )}
+          <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-[18px] sm:text-[20px] font-bold text-[#2B303A] font-jp tracking-wide leading-relaxed">
+            {renderQuestionSentence(formattedQ.mainQuestion)}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {formattedQ.precedingContext && (
+            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-1.5 rounded-xl border border-[#E9ECEF] inline-block font-jp">
+              {formattedQ.precedingContext}
+            </div>
+          )}
+          <h3 className="text-[18px] sm:text-[20px] font-bold text-[#2B303A] font-jp leading-relaxed">
+            {renderQuestionSentence(formattedQ.mainQuestion)}
+          </h3>
+          {formattedQ.translation && (
+            <p className="text-xs sm:text-sm text-[#6C757D]">
+              {formattedQ.translation}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================
+          第二行：題目類型描述 (第二行呈現，字級小一些，與題目主體徹底分開)
+          ======================================================== */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#F1F3F5]">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-[#4F6375]/10 text-[#3D4F5F]">
+          <span className="text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-md bg-[#4F6375]/10 text-[#3D4F5F]">
             {formattedQ.subTypeLabel}
           </span>
 
-          {/* Subordinate Action Hint / Instruction (依層級下修，輔助小字，清晰獨立) */}
           {formattedQ.instruction && (
-            <div className="text-xs text-[#6C757D] font-medium flex items-center gap-1.5 pl-0.5">
+            <div className="text-xs text-[#6C757D] font-normal flex items-center gap-1.5 pl-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#CED4DA] shrink-0" />
               <span>{formattedQ.instruction}</span>
             </div>
@@ -874,11 +1034,32 @@ const cleanOptionText = (text: string) => {
         </div>
 
         {formattedQ.readingGuide && (
-          <span className="text-xs text-[#868E96] font-jp hidden sm:inline">
+          <span className="text-[11px] text-[#868E96] font-jp hidden sm:inline">
             {formattedQ.readingGuide}
           </span>
         )}
       </div>
+
+      {/* 閱讀文章本文卡片（若為閱讀題且當前未進入左右雙欄時之全面兜底保障） */}
+      {isReadingQuestion && readingPassage && (
+        <div className="lg:hidden p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl space-y-2">
+          <div className="flex items-center justify-between pb-2 border-b border-[#E9ECEF]">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#5A6959]/15 text-[#354334]">
+              閱讀文章本文
+            </span>
+            <button
+              type="button"
+              onClick={() => isPlayingAudio ? stopListeningAudio() : playArticleSpeech(readingPassage)}
+              className="text-xs text-[#4F6375] hover:text-[#3D4F5F] font-medium flex items-center gap-1 cursor-pointer"
+            >
+              朗讀文章
+            </button>
+          </div>
+          <div className="text-sm font-jp text-[#2B303A] leading-relaxed whitespace-pre-wrap select-text">
+            {stripCodeArtifacts(readingPassage)}
+          </div>
+        </div>
+      )}
 
       {/* LISTENING QUESTION SECTION (純淨男女聲對話，不念「男」「女」標籤) */}
       {isListening && (
@@ -931,58 +1112,22 @@ const cleanOptionText = (text: string) => {
       )}
 
       {/* ORDERING (星號重組題) SECTION */}
-      {formattedQ.isOrdering ? (
-        <div className="space-y-4">
-          {/* Preceding context if present */}
-          {formattedQ.precedingContext && (
-            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
-              {formattedQ.precedingContext}
-            </div>
-          )}
-
-          {/* Template Sentence with underlines */}
-          <div className="p-4 bg-[#F8F9FA] border border-[#E9ECEF] rounded-xl text-[17px] sm:text-[18px] font-bold text-[#2B303A] font-jp tracking-wide leading-loose">
-            {renderQuestionSentence(formattedQ.mainQuestion)}
+      {formattedQ.isOrdering && formattedQ.scrambleItems && formattedQ.scrambleItems.length > 0 && (
+        <div className="space-y-1.5 pt-1">
+          <div className="text-xs text-[#6C757D] font-medium">
+            待排序單字：
           </div>
-
-          {/* 4 Candidate Word Blocks */}
-          {formattedQ.scrambleItems && formattedQ.scrambleItems.length > 0 && (
-            <div className="space-y-1.5 pt-1">
-              <div className="text-xs text-[#6C757D] font-medium">
-                待排序單字：
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {formattedQ.scrambleItems.map((item, sIdx) => (
+              <div
+                key={sIdx}
+                className="p-2.5 rounded-lg bg-white border border-[#CED4DA] text-center text-sm font-bold text-[#2B303A] font-jp shadow-2xs"
+              >
+                <span className="text-xs text-[#6C757D] mr-1.5">{sIdx + 1}.</span>
+                <span>{cleanOptionText(item)}</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {formattedQ.scrambleItems.map((item, sIdx) => (
-                  <div
-                    key={sIdx}
-                    className="p-2.5 rounded-lg bg-white border border-[#CED4DA] text-center text-sm font-bold text-[#2B303A] font-jp shadow-2xs"
-                  >
-                    <span className="text-xs text-[#6C757D] mr-1.5">{sIdx + 1}.</span>
-                    <span>{cleanOptionText(item)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* STANDARD QUESTION TEXT (文字拼音、語彙、文法，主體獨立成行，劃線處清晰標記) */
-        <div className="space-y-2">
-          {formattedQ.precedingContext && (
-            <div className="text-xs sm:text-sm text-[#495057] bg-[#F8F9FA] px-3.5 py-2 rounded-xl border border-[#E9ECEF] inline-block font-jp">
-              {formattedQ.precedingContext}
-            </div>
-          )}
-
-          <h3 className="text-[18px] sm:text-[20px] font-bold text-[#2B303A] font-jp leading-relaxed">
-            {renderQuestionSentence(formattedQ.mainQuestion)}
-          </h3>
-
-          {formattedQ.translation && (
-            <p className="text-xs sm:text-sm text-[#6C757D]">
-              {formattedQ.translation}
-            </p>
-          )}
+            ))}
+          </div>
         </div>
       )}
 

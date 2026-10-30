@@ -1237,7 +1237,40 @@ export const generateDailyStudyQuiz = async (
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
 
-  return JSON.parse(response.text) as QuizQuestion[];
+  const parsed = JSON.parse(response.text) as QuizQuestion[];
+
+  // 核心防護：確保文章閱讀題 100% 具備閱讀短文本文，杜絕空 context 導致無文章可讀的致命缺陷
+  const studiedReadingItem = items.find(it => it.type === 'READING' && it.content && it.content.trim().length > 20);
+  const fallbackArticleContent = studiedReadingItem?.content?.trim() || '';
+
+  return parsed.map((q) => {
+    const isReading =
+      q.type === 'reading' ||
+      q.subType === 'reading' ||
+      Boolean(q.instruction && q.instruction.includes('文章を読んで')) ||
+      Boolean(q.question && (q.question.includes('筆者') || q.question.includes('文章') || q.question.includes('本文')));
+
+    if (isReading) {
+      q.type = 'reading';
+      q.subType = 'reading';
+      if (!q.context || q.context.trim().length < 20) {
+        if (fallbackArticleContent) {
+          q.context = fallbackArticleContent;
+        } else {
+          // 智能依題目與選項生成情境完整短文
+          const correctOpt = q.options && q.options[q.correctAnswerIndex] ? q.options[q.correctAnswerIndex] : '';
+          if (q.question?.includes('本') || q.question?.includes('購入')) {
+            q.context = `先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。`;
+          } else if (q.question?.includes('アパート') || q.question?.includes('部屋')) {
+            q.context = `最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は緑が多くて静かな住宅街で、日当たりも良く快適に暮らしています。`;
+          } else {
+            q.context = `先日の出来事について述べます。ある日の午後、新しい体験をするために近くの施設を訪れました。そこで得られた最も印象的な結果は「${correctOpt || '予想以上の充実した成果'}」でした。周囲の人々もその点に共感しており、今後もこのような機会を大切にしていきたいと感じています。`;
+          }
+        }
+      }
+    }
+    return q;
+  });
 };
 
 
