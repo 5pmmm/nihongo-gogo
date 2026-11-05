@@ -49,7 +49,7 @@ export const WordCard: React.FC<WordCardProps> = ({
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18 }}
-        className="bg-white border border-[#E9ECEF] rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col justify-between relative group"
+        className="bg-white border border-[#E9ECEF] rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col justify-between relative group h-fit"
       >
         {/* Top Header: Tag, Pitch Accent, Part of Speech, Enlarge Button, Bookmark button */}
         <div>

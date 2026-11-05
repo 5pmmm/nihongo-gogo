@@ -138,7 +138,7 @@ export const BookmarkView: React.FC<BookmarkViewProps> = ({ onStartQuizWithBookm
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 items-start">
           <AnimatePresence>
             {filtered.map(item => {
               const isWord = item.type === 'WORD';
@@ -153,8 +153,12 @@ export const BookmarkView: React.FC<BookmarkViewProps> = ({ onStartQuizWithBookm
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.18 }}
-                  className="bg-white border border-[#E9ECEF] rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col justify-between relative group"
+                  transition={{ duration: 0.2 }}
+                  className={`bg-white border rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col h-fit relative group ${
+                    isExpanded 
+                      ? 'sm:col-span-2 border-[#4F6375]/40 shadow-xs' 
+                      : 'border-[#E9ECEF]'
+                  }`}
                 >
                   {/* Top Bar: Type label & Star button */}
                   <div className="flex items-start justify-between gap-3 mb-2">

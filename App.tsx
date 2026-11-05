@@ -264,7 +264,7 @@ export const App: React.FC = () => {
 
                   {/* Word Definitions Grid */}
                   {definitions.length > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2 items-start">
                       {definitions.map((item, idx) => (
                         <WordCard key={item.id || idx} data={item} />
                       ))}
@@ -273,7 +273,7 @@ export const App: React.FC = () => {
 
                   {/* Grammar Definitions Grid */}
                   {grammarList.length > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2 items-start">
                       {grammarList.map((item, idx) => (
                         <GrammarCard key={item.id || idx} data={item} />
                       ))}

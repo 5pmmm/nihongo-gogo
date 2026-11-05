@@ -174,7 +174,7 @@ export const GrammarCard: React.FC<GrammarCardProps> = ({
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18 }}
-        className="bg-white border border-[#E9ECEF] rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col justify-between relative group"
+        className="bg-white border border-[#E9ECEF] rounded-2xl p-5 hover:border-[#CED4DA] hover:shadow-xs transition-all flex flex-col justify-between relative group h-fit"
       >
         <div>
           {/* Top Header: Tag, Enlarge Button, Bookmark Button */}

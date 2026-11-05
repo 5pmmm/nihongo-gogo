@@ -86,19 +86,6 @@ const mockGenerateContent = async (args: any) => {
       {
         id: "mock_daily_q1",
         context: "",
-        instruction: "下線部の漢字の正しい読み方（拼音）を選びなさい。",
-        question: "彼女と映画を見る【約束】をした。",
-        sentence: "彼女と映画を見る【約束】をした。",
-        questionReading: "かのじょとえいがをみるやくそくをした。",
-        questionTranslation: "我和她約好了要去看電影。",
-        options: ["やくそく", "よてい", "じゅんび", "あんない"],
-        correctAnswerIndex: 0,
-        explanation: "「約束」的正確假名讀音為「やくそく」（約定、約會）。",
-        type: "vocab"
-      },
-      {
-        id: "mock_daily_q2",
-        context: "",
         instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
         sentence: "（駅の改札が混雑しているので、）私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
         scrambleItems: ["人が", "少なく", "なって", "から"],
@@ -111,40 +98,65 @@ const mockGenerateContent = async (args: any) => {
         type: "ordering"
       },
       {
+        id: "mock_daily_q2",
+        context: "先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。",
+        instruction: "文章を読んで、次の問いに最も適した答えを選びなさい。",
+        question: "筆者が本を購入した一番の理由は何ですか。",
+        questionReading: "ひっしゃがほんをこうにゅうしたいちばんのりゆうはなんですか。",
+        questionTranslation: "作者買這本書的最主要原因是什麼？",
+        options: [
+          "内容を事前にしっかり確認したから",
+          "表紙のイラストに強く惹かれたから",
+          "夜遅くに衝動買いをしたから",
+          "合格するためにどうしても必要だったから"
+        ],
+        correctAnswerIndex: 1,
+        explanation: "文章第二句明確提到「棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた」，因此買書的主要原因為被封面插圖深深吸引，正確答案為第 2 項。",
+        type: "reading"
+      },
+      {
         id: "mock_daily_q3",
         context: "",
-        instruction: "文法接續問題：この文法パターンの接續として最も自然なものを選びなさい。",
-        question: "「〜はずです」の直前に接続する動詞の活用形として最も適切なものはどれか。",
-        sentence: "「〜はずです」の直前に接続する動詞の活用形として最も適切なものはどれか。",
-        questionReading: "はずですのちょくぜんにせつぞくするどうしのかつようけいとしてもっともてきせつなものはどれか。",
-        questionTranslation: "文法接續問題：接在「〜はずです」前面的動詞形式何者最適當？",
-        options: ["辞書形", "ます形（去ます）", "て形", "ない形"],
-        correctAnswerIndex: 0,
-        explanation: "「〜はずです」前接動詞辭書形（連體形），表示根據客觀常理推測「應該會...」。",
-        type: "grammar"
+        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
+        sentence: "（明日は大切な面接があるので、）今夜は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 休もうと思う。",
+        scrambleItems: ["夜遅くまで", "起きずに", "早く", "ベッドに入って"],
+        question: "（明日は大切な面接があるので、）今夜は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 休もうと思う。",
+        questionReading: "あしたはたいせつなめんせつがあるので、こんやはよるおそくまでおきずに、はやくベッドにはいってやすもうとおもう。",
+        questionTranslation: "（因為明天有重要的面試，）我打算今晚不要熬夜到很晚，早點上床休息。",
+        options: ["夜遅くまで", "起きずに", "早く", "ベッドに入って"],
+        correctAnswerIndex: 3,
+        explanation: "【正確順序】1（夜遅くまで） → 2（起きずに） → 4（ベッドに入って） → 3（早く）或 1 → 2 → 3（早く） → 4（ベッドに入って）。★ 第 3 位為「4. ベッドに入って」或「3. 早く」。副詞修飾動詞連用形，接續嚴格成立。",
+        type: "ordering"
       },
       {
         id: "mock_daily_q4",
-        context: "女：明日の会議の資料、もう印刷終わった？\n男：あ、課長の指示でグラフを差し替えることになったんだ。\n女：了解！じゃあ、差し替え後の印刷を手伝うね。",
-        transcript: "女：明日の会議の資料、もう印刷終わった？\n男：あ、課長の指示でグラフを差し替えることになったんだ。\n女：了解！じゃあ、差し替え後の印刷を手伝うね。",
-        dialogueLines: [
-          { speaker: "女", text: "明日の会議の資料、もう印刷終わった？", gender: "female" },
-          { speaker: "男", text: "あ、課長の指示でグラフを差し替えることになったんだ。", gender: "male" },
-          { speaker: "女", text: "了解！じゃあ、差し替え後の印刷を手伝うね。", gender: "female" }
-        ],
-        instruction: "会話を聞いて、次の問いに答えなさい。",
-        question: "会話の内容として最も合っているものはどれですか。",
-        questionReading: "かいわのないようとしてもっともあっているものはどれですか。",
-        questionTranslation: "對話內容中何者最符合情境？",
+        context: "最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は静かな住宅街で、日当たりも良く快適に暮らしています。",
+        instruction: "文章を読んで、次の問いに最も適した答えを選びなさい。",
+        question: "筆者が新しいアパートを気に入っている理由として、文章で述べられていないものはどれですか。",
+        questionReading: "ひっしゃがあたらしいあぱーとをきにいっているりゆうとして、ぶんしょうでのべられていないものはどれですか。",
+        questionTranslation: "關於作者喜歡新公寓的理由，文章中未提及的是哪一項？",
         options: [
-          "グラフを差し替えてから印刷する",
-          "会議は来週に延期された",
-          "資料の印刷はすべて完了している",
-          "課長が自ら資料を印刷する"
+          "部屋が広いこと",
+          "駅から近いこと",
+          "家賃が安いこと",
+          "周囲が静かな住宅街であること"
         ],
         correctAnswerIndex: 0,
-        explanation: "對話中男士提到「課長の指示でグラフを差し替えることになった」，女生則說會幫忙更換後的印刷，故正確選項為第 1 項。",
-        type: "listening"
+        explanation: "文章中提到了「駅から近い」、「家賃も安くなった」、「周囲は静かな住宅街」以及「日当たりも良い」，但並未提及「部屋が広い（房間寬敞）」，因此第 1 項為文章中未提及的選項。",
+        type: "reading"
+      },
+      {
+        id: "mock_daily_q5",
+        context: "",
+        instruction: "下線の言葉の用法や意味として最も適当なものを選びなさい。",
+        question: "試験の合格ラインは70点だったが、70点で【ギリギリ】合格できた。",
+        sentence: "試験の合格ラインは70点だったが、70点で【ギリギリ】合格できた。",
+        questionReading: "しけんのごうかくラインはななじゅってんだったが、ななじゅってんでギリギリごうかくできた。",
+        questionTranslation: "考試及格標準是70分，我考了70分勉強及格。",
+        options: ["余裕を持って十分に", "限界ぎりぎりで辛うじて", "完全に不合格で", "計画通りに順調に"],
+        correctAnswerIndex: 1,
+        explanation: "「ギリギリ」表示在極限、勉強趕上或勉強過關的狀態（在及格邊緣勉強及格）。",
+        type: "vocab"
       }
     ];
   } else if (contentStr.includes("mixed Japanese quiz") || contentStr.includes("10-question") || contentStr.includes("engaging Japanese quiz") || contentStr.includes("quiz")) {
@@ -1190,6 +1202,15 @@ export const generateDailyStudyQuiz = async (
     TASK:
     Generate EXACTLY ${safeCount} focused questions testing DIRECTLY the items above.
     
+    CRITICAL MANDATE - QUESTION TYPE PROPORTIONS (大幅提高「重組題」與「文章理解題」出題佔比 - 核心要求):
+    - 「重組題（星號題, type: 'ordering'）」與「文章理解題 (type: 'reading')」必須優先出題，且合計必須佔據全部題目總數的 70% 以上！
+    - 具體分配規範：
+      * 若總題數為 3 題：至少 1 題 ordering、至少 1 題 reading、其餘 1 題為單字或文法題。
+      * 若總題數為 5 題：至少 2 題 ordering、至少 2 題 reading、其餘 1 題為單字/文法/聽力題。
+      * 若總題數為 10 題：至少 4 題 ordering、至少 4 題 reading、其餘 2 題為單字/文法/聽力題。
+      * 若總題數為 15 題：至少 6 題 ordering、至少 6 題 reading、其餘 3 題為單字/文法/聽力題。
+    - 即使使用者勾選的項目僅有單字或文法，亦必須運用這些詞彙文法設計自然的 3~5 句日文短文/對話情境於 'context' 中出文章閱讀題，並設計包含這些詞彙文法的星號重組題！
+
     CRITICAL QUESTION TYPES & STRICT FIELD SPECIFICATIONS:
     1. 單字拆解題 / 字彙與文法用法題 (type: "vocab" or "grammar"):
        - 'instruction': "下線の言葉の用法や意味として最も適当なものを選びなさい。"
