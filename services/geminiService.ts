@@ -907,55 +907,104 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
     console.warn("Failed to load /data/commonWords.json via fetch:", e);
   }
 
-  // 【第 3 階防線】：若上述皆無，才呼叫 Gemini API 進行解析
-  const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
-    contents: `
-      You are an expert Japanese linguist and dictionary lexicographer.
-      Analyze the following Japanese word(s) or input:
-      "${trimmed}"
+  // 【第 3 階防線】：若上述皆無，才呼叫 Gemini API 進行解析（配置 8 秒 Timeout 限制與離線防卡死降級）
+  const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
 
-      MANDATORY REQUIREMENTS:
-      1. Provide accurate Hiragana reading (標音).
-      2. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
-      3. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
-      4. Provide clear, concise Traditional Chinese definition (繁體中文).
-      5. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
-      6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
-      
-      Response Language: Traditional Chinese (繁體中文).
-    `,
-    config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
-  });
-  const data = JSON.parse(response.text) as WordDefinition[];
-  const formattedData = data.map((d, i) => {
-    // If examples array is missing or empty, build it from exampleSentence
-    let exList = d.examples && d.examples.length > 0 ? d.examples : [];
-    if (exList.length === 0 && d.exampleSentence) {
-      exList = [{
-        sentence: d.exampleSentence,
-        reading: d.exampleReading || '',
-        translation: d.exampleTranslation || ''
-      }];
-    }
-    return {
-      ...d,
-      id: d.id || `w-${Date.now()}-${i}`,
-      examples: exList
-    };
-  });
+  try {
+    const apiCallPromise = ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: `
+        You are an expert Japanese linguist and dictionary lexicographer.
+        Analyze the following Japanese word(s) or input:
+        "${trimmed}"
 
-  // 解析成功後自動存入 localStorage 快取
-  if (typeof window !== 'undefined' && window.localStorage && formattedData.length > 0) {
-    try {
-      window.localStorage.setItem(cacheKey, JSON.stringify(formattedData));
-    } catch (e) {
-      console.warn("Failed to write word cache to localStorage:", e);
+        MANDATORY REQUIREMENTS:
+        1. Provide accurate Hiragana reading (標音).
+        2. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
+        3. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
+        4. Provide clear, concise Traditional Chinese definition (繁體中文).
+        5. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
+        6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
+        
+        Response Language: Traditional Chinese (繁體中文).
+      `,
+      config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
+    });
+
+    // 8 秒逾時防卡死機制
+    let timeoutTimer: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutTimer = setTimeout(() => {
+        reject(new Error("GEMINI_TIMEOUT_8S"));
+      }, 8000);
+    });
+
+    const response = await Promise.race([apiCallPromise, timeoutPromise]);
+    clearTimeout(timeoutTimer);
+
+    const data = JSON.parse(response.text) as WordDefinition[];
+    const formattedData = data.map((d, i) => {
+      let exList = d.examples && d.examples.length > 0 ? d.examples : [];
+      if (exList.length === 0 && d.exampleSentence) {
+        exList = [{
+          sentence: d.exampleSentence,
+          reading: d.exampleReading || '',
+          translation: d.exampleTranslation || ''
+        }];
+      }
+      return {
+        ...d,
+        id: d.id || `w-${Date.now()}-${i}`,
+        examples: exList
+      };
+    });
+
+    // 解析成功後自動存入 localStorage 快取
+    if (typeof window !== 'undefined' && window.localStorage && formattedData.length > 0) {
+      try {
+        window.localStorage.setItem(cacheKey, JSON.stringify(formattedData));
+      } catch (e) {
+        console.warn("Failed to write word cache to localStorage:", e);
+      }
     }
+
+    return formattedData;
+  } catch (err: any) {
+    const isTimeout = err?.message === "GEMINI_TIMEOUT_8S";
+    const status = err?.status || err?.code || "";
+    console.warn(
+      `[日本語ごご！] Gemini API 解析${isTimeout ? "逾時 (已超過 8 秒限制)" : `異常 (狀態碼: ${status || "未知"})`}，已自動啟用離線防卡死機制，傳回預設簡易解析卡片。詳細原因:`,
+      err
+    );
+
+    // 自動切換至離線 Mode，傳回預設的簡易解析卡片，防止頁面卡死在解析狀態
+    const fallbackList: WordDefinition[] = (tokens.length > 0 ? tokens : [trimmed]).map((tok, i) => ({
+      id: `w-fallback-${Date.now()}-${i}`,
+      word: tok,
+      reading: tok,
+      meaning: "（離線模式）連線逾時或暫時無法存取線上服務，提供基礎單字卡以供學習。",
+      pitchAccent: "平板型 [0]",
+      partOfSpeech: "詞彙",
+      exampleSentence: `${tok}を使った日本語の練習をしましょう。`,
+      exampleReading: `${tok}をつかったにほんごのれんしゅうをしましょう。`,
+      exampleTranslation: `讓我們使用「${tok}」來練習日語吧。`,
+      examples: [
+        {
+          sentence: `${tok}を使った日本語の練習をしましょう。`,
+          reading: `${tok}をつかったにほんごのれんしゅうをしましょう。`,
+          translation: `讓我們使用「${tok}」來練習日語吧。`
+        }
+      ]
+    }));
+
+    return fallbackList;
   }
-
-  return formattedData;
 };
+
+/**
+ * lookupJapanese: 字典單字解析核心函式（支援三階防線快取、8 秒逾時防卡死與離線自動降級）
+ */
+export const lookupJapanese = fetchWordDefinitions;
 
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
