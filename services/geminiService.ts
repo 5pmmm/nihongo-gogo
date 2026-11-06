@@ -858,16 +858,19 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
   // 【第 2 階防線】：非同步讀取 public 目錄中的 /data/commonWords.json
   try {
     let wordBank = inMemoryCommonWords;
-    if (!wordBank && typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-      const res = await fetch('/data/commonWords.json');
+      const baseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.BASE_URL) || '/';
+      const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+      let res = await fetch(`${cleanBase}data/commonWords.json`);
+      if (!res.ok) {
+        res = await fetch('/data/commonWords.json');
+      }
       if (res.ok) {
         wordBank = await res.json();
         inMemoryCommonWords = wordBank;
       }
-    }
 
     if (wordBank) {
-      const dict = wordBank as Record<string, { word: string; furigana: string; meanings: string[]; pitch?: string }>;
+      const dict = wordBank as Record<string, { word: string; furigana: string; meanings: string[]; pitch?: string; examples?: string[] }>;
       const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
 
       if (tokens.length > 0) {
@@ -876,6 +879,23 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
           const t = tokens[i];
           const entry = dict[t];
           if (entry) {
+            let exSentence = '';
+            let exTrans = '';
+            const exList: { sentence: string; reading: string; translation: string }[] = [];
+            if (entry.examples && Array.isArray(entry.examples) && entry.examples.length > 0) {
+              entry.examples.forEach(exStr => {
+                const m = exStr.match(/^(.*?)[(（](.+?)[)）]\s*$/);
+                if (m) {
+                  if (!exSentence) exSentence = m[1].trim();
+                  if (!exTrans) exTrans = m[2].trim();
+                  exList.push({ sentence: m[1].trim(), reading: '', translation: m[2].trim() });
+                } else {
+                  if (!exSentence) exSentence = exStr.trim();
+                  exList.push({ sentence: exStr.trim(), reading: '', translation: '' });
+                }
+              });
+            }
+
             localFound.push({
               id: `w-common-${t}-${i}`,
               word: entry.word || t,
@@ -883,9 +903,9 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
               meaning: Array.isArray(entry.meanings) ? entry.meanings.join('；') : (entry.meanings || ''),
               pitchAccent: entry.pitch || '',
               partOfSpeech: '',
-              exampleSentence: '',
-              exampleTranslation: '',
-              examples: []
+              exampleSentence: exSentence,
+              exampleTranslation: exTrans,
+              examples: exList
             });
           }
         }
