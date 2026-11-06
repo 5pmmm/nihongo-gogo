@@ -1,6 +1,6 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
+import commonWordsData from "../data/commonWords.json";
 
 let globalAiInstance: GoogleGenAI | null = null;
 
@@ -130,7 +130,7 @@ const mockGenerateContent = async (args: any) => {
       },
       {
         id: "mock_daily_q4",
-        context: "最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は静かな住宅街で、日当たりも良く快適に暮らしています。",
+        context: "最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は緑が多くて静かな住宅街で、日当たりも良く快適に暮らしています。",
         instruction: "文章を読んで、次の問いに最も適した答えを選びなさい。",
         question: "筆者が新しいアパートを気に入っている理由として、文章で述べられていないものはどれですか。",
         questionReading: "ひっしゃがあたらしいあぱーとをきにいっているりゆうとして、ぶんしょうでのべられていないものはどれですか。",
@@ -341,7 +341,7 @@ const mockGenerateContent = async (args: any) => {
           exampleReading: "まいにちでんしゃにのってがっこうへかよっています。",
           exampleTranslation: "我每天搭電車去學校上學。",
           sentenceBreakdown: [
-            { "word": "学校", "reading": "がっこう", "meaning": "學校" }
+            { "word": "學校", "reading": "がっこう", "meaning": "學校" }
           ]
         }
       ];
@@ -450,9 +450,9 @@ const mockGenerateContent = async (args: any) => {
           explanation: "常用於書面或比較正式的場合，表示變化正在進展中。",
           examples: [
             {
-              sentence: "日本の人口は減少しつつある。",
-              reading: "にほんのじんこうはげんしょうしつつある。",
-              translation: "日本的人口正在逐漸減少。"
+              sentence: "景気は回復しつつある。",
+              reading: "けいきはかいふくしつつある。",
+              translation: "景氣正在逐步復甦當中。"
             }
           ]
         }
@@ -460,15 +460,15 @@ const mockGenerateContent = async (args: any) => {
     } else if (contentStr.includes("N3")) {
       mockData = [
         {
-          grammarPoint: "～たびに",
-          connection: "動詞 普通形 / 名詞 + の + たびに",
-          meaning: "每次...就...、每當...",
-          explanation: "表示「每當進行某動作，後面的情況就一定隨之發生」之意。",
+          grammarPoint: "～わけにはいかない",
+          connection: "動詞 辭書形／ない形 + わけにはいかない",
+          meaning: "不能...、無法...（基於常識、道德或情理上不能這樣做）",
+          explanation: "表示在當下的社會常理、道義情理或客觀義務下，不被允許做出某行為。",
           examples: [
             {
-              sentence: "この曲を聞くたびに、故郷を思い出します。",
-              reading: "このきょくをきくたびに、こきょうをおもいだします。",
-              translation: "每當聽到這首歌，我就會想起故鄉。"
+              sentence: "明日は大事な試験があるので、休むわけにはいかない。",
+              reading: "あしたはだいじなしけんがあるので、やすむわけにはいかない。",
+              translation: "明天有重要的考試，所以我絕對不能請假。"
             }
           ]
         }
@@ -476,15 +476,15 @@ const mockGenerateContent = async (args: any) => {
     } else if (contentStr.includes("N4")) {
       mockData = [
         {
-          grammarPoint: "～ながら",
-          connection: "動詞 ます形（去ます） + ながら",
-          meaning: "一邊...一邊... (同時進行兩個動作)",
-          explanation: "表示同時進行兩個動作，重點通常放在後面的主要動詞上。",
+          grammarPoint: "～たことがある",
+          connection: "動詞 た形 + ことがある",
+          meaning: "曾經有過...的經驗",
+          explanation: "表示過去曾經做過某事的經驗。",
           examples: [
             {
-              sentence: "速度を落としながら、ゆっくり曲がってください。",
-              reading: "そくどをおとしながら、ゆっくりまがってください。",
-              translation: "請一邊減速，一邊緩慢轉彎。"
+              sentence: "富士山に登ったことがありますか。",
+              reading: "ふじさんにのぼったことがありますか。",
+              translation: "你曾經登過富士山嗎？"
             }
           ]
         }
@@ -492,136 +492,181 @@ const mockGenerateContent = async (args: any) => {
     } else {
       mockData = [
         {
-          grammarPoint: "～てください",
-          connection: "動詞 て形 + ください",
-          meaning: "請做某事",
-          explanation: "用於委婉或禮貌地請求、要求對方進行某項動作。",
+          grammarPoint: "～てはいけない",
+          connection: "動詞 て形 + はいけない",
+          meaning: "不可以...、禁止...",
+          explanation: "用於表達禁止或規則上不允許的行為。",
           examples: [
             {
-              sentence: "本を読んでください。",
-              reading: "ほんをよんでください。",
-              translation: "請讀書。"
+              sentence: "ここで写真を撮ってはいけません。",
+              reading: "ここでしゃしんをとってはいけません。",
+              translation: "這裡不可以拍照。"
+            }
+          ]
+        }
+      ];
+    }
+  } else if (contentStr.includes("short article/story in Japanese") || contentStr.includes("generateRecommendedReading")) {
+    mockData = {
+      title: "春のピクニック (春天的野餐)",
+      content: "先週末、友達と一緒に公園へピクニックに行きました。桜の花が満開で、とても綺麗でした。持ってきたお弁当を食べながら、いろいろな話をしました。風が吹くと、ピンクの花びらが雪のように舞い落ちて、素晴らしい景色でした。春の暖かさを感じて、心からリラックスできた一日でした。",
+      translation: "上個週末，我和朋友一起去公園野餐。櫻花正盛開著，非常漂亮。我們一邊吃著帶來的便當，一邊聊了好多事情。微風吹拂時，粉紅色的花瓣像雪花般翩翩飄落，真是絕美的景色。感受到了春天的溫暖，是身心完全放鬆的一天。",
+      tokens: [
+        {
+          text: "ピクニック",
+          dictionaryForm: "ピクニック",
+          reading: "ぴくにっく",
+          meaning: "野餐 (Picnic)",
+          type: "VOCAB",
+          jlpt: "N5",
+          partOfSpeech: "名詞",
+          pitchAccent: "頭高型 [1]",
+          exampleSentence: "日曜日に家族とピクニックへ行きます。",
+          exampleReading: "にちようびにかぞくとぴくにっくへいきます。",
+          exampleTranslation: "星期天要跟家人去野餐。",
+          examples: [
+            {
+              sentence: "日曜日に家族とピクニックへ行きます。",
+              reading: "にちようびにかぞくとぴくにっくへいきます。",
+              translation: "星期天要跟家人去野餐。"
             }
           ]
         },
         {
-          grammarPoint: "～たいです",
-          connection: "動詞 ます形（去ます） + たいです",
-          meaning: "想要做某事",
-          explanation: "表達說話者自己（第一人稱）想要做某動作的願望。",
+          text: "満開",
+          dictionaryForm: "満開",
+          reading: "まんかい",
+          meaning: "盛開、滿開",
+          type: "VOCAB",
+          jlpt: "N3",
+          partOfSpeech: "名詞",
+          pitchAccent: "平板型 [0]",
+          exampleSentence: "桜が満開の時期はとても短いです。",
+          exampleReading: "さくらがまんかいのじきはとてもみじかいです。",
+          exampleTranslation: "櫻花盛開的時期非常短暫。",
           examples: [
             {
-              sentence: "お茶を飲みたいです。",
-              reading: "おちゃをのみたいです。",
-              translation: "我想喝茶。"
+              sentence: "桜が満開の時期はとても短いです。",
+              reading: "さくらがまんかいのじきはとてもみじかいです。",
+              translation: "櫻花盛開的時期非常短暫。"
+            }
+          ]
+        },
+        {
+          text: "～ながら",
+          dictionaryForm: "～ながら",
+          reading: "～ながら",
+          meaning: "一邊...一邊...（同時進行兩個動作）",
+          type: "GRAMMAR",
+          jlpt: "N4",
+          partOfSpeech: "接續助詞",
+          pitchAccent: "平板型 [0]",
+          exampleSentence: "音楽を聴きながら散歩するのが日課です。",
+          exampleReading: "おんがくをききながらさんぽするのがにっかです。",
+          exampleTranslation: "一邊聽音樂一邊散步是我的例行公事。",
+          examples: [
+            {
+              sentence: "音楽を聴きながら散歩するのが日課です。",
+              reading: "おんがくをききながらさんぽするのがにっかです。",
+              translation: "一邊聽音樂一邊散步是我的例行公事。"
             }
           ]
         }
-      ];
-    }
-  } else if (contentStr.includes("Japanese reading text") || contentStr.includes("custom Japanese reading article") || contentStr.includes("story/article") || contentStr.includes("ReadingMaterial") || contentStr.includes("original short article") || contentStr.includes("generateRecommendedReading")) {
-    if (contentStr.includes("N1")) {
-      mockData = {
-        title: "日本語に現れる和の美意識 (日語中的和風美學觀)",
-        content: "言葉は、その言語を話す民族の精神文化を色濃く反映する鏡である。日本語の語彙における「もののあわれ」や「わびさび」は、自然のはかなさに美を見い出す独自の美意識の表象である。",
-        translation: "語言是生動反映說話民族精髓與精神文化的鏡子。日語詞彙中的「物哀」與「侘寂」，是以獨特美學視角在自然虛無消逝中尋見美感的表徵。",
-        tokens: [
-          {
-            text: "美意識",
-            dictionaryForm: "美意識",
-            reading: "びいしき",
-            meaning: "審美觀、美學概念",
-            type: "VOCAB",
-            jlpt: "N1",
-            exampleSentence: "日本の伝統的な美意識に触れる。",
-            exampleReading: "にほんのでんとうてきなびいしきにふれる。",
-            exampleTranslation: "接觸到日本傳統的審美觀與美學思維。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N2")) {
-      mockData = {
-        title: "新幹線の安全性と最新技術 (新幹線的安全性與全新科技)",
-        content: "1964年の開業以来、新幹線は乗車中の乗客の死亡事故を一度も起こしていない。これほどの安全性を維持できている背景には、高度運行管理システムがある。",
-        translation: "自1964年開業以來，新幹線從未發生過導致乘客死亡的重大事故。高水準安全性的維持背景正是源於極度精緻的高度火車運行管理系統。",
-        tokens: [
-          {
-            text: "維持",
-            dictionaryForm: "維持",
-            reading: "いじ",
-            meaning: "維護、維持現狀",
-            type: "VOCAB",
-            jlpt: "N2",
-            exampleSentence: "安全性を維持するために毎日点検します。",
-            exampleReading: "あんぜんせいをいじするためにまいにちてんけんします。",
-            exampleTranslation: "為了維持高度安全，每天都會進行車輛檢點運營。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N3")) {
-      mockData = {
-        title: "日本の伝統的な祭り (日本的傳統大祭典)",
-        content: "夏になると、日本のあちこちでお祭りが開かれます。人々は「浴衣」を着て、賑やかに太鼓を叩き、夏の訪れをお祝いします。",
-        translation: "一到了夏天，日本各個地方就會舉辦大祭典。人們穿上休閒的夏日浴衣相聚在一起，一邊熱烈敲著太鼓，祈福並慶祝盛夏的來臨。",
-        tokens: [
-          {
-            text: "伝統的",
-            dictionaryForm: "伝統的",
-            reading: "てんとうてき",
-            meaning: "傳統的、具有歷史傳承的",
-            type: "VOCAB",
-            jlpt: "N3",
-            exampleSentence: "日本の伝統的なお祭りに参加しました。",
-            exampleReading: "にほんのでんとうてきなおまつりにさんかしました。",
-            exampleTranslation: "我參加了日本傳統的慶典活動。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N4")) {
-      mockData = {
-        title: "京都の美味しい食べ物 (京都的美味佳餚)",
-        content: "京都には長い歴史があって、伝統的な料理がたくさんあります。特に「抹茶」で作られたデザートや、豆腐を使ったお料理は世界中で有名です。",
-        translation: "京都擁有悠久漫長的历史，有很多傳承下來的精湛料理。其中用「抹茶」熬製的精工甜點與鮮美豆腐料理在全世界都非常聞名。",
-        tokens: [
-          {
-            text: "歴史",
-            dictionaryForm: "歴史",
-            reading: "れきし",
-            meaning: "歷史",
-            type: "VOCAB",
-            jlpt: "N4",
-            exampleSentence: "歴史のあるお寺へ行きました。",
-            exampleReading: "れきしのあるおてらへいきました。",
-            exampleTranslation: "去了有歷史感的寺廟。"
-          }
-        ]
-      };
-    } else {
-      mockData = {
-        title: "富士山への旅行 (富士山之旅)",
-        content: "富士山は日本で一番高くて美しい山です。多くの観光客が毎年登ります。富士山の近くの湖はとても綺麗です。",
-        translation: "富士山是日本最高最美的山峰。每年有很多遊客前去登山。富士山附近的湖泊非常漂亮。",
-        tokens: [
-          {
-            text: "一番",
-            dictionaryForm: "一番",
-            reading: "いちばん",
-            meaning: "最、第一",
-            type: "VOCAB",
-            jlpt: "N5",
-            exampleSentence: "日本で一番高い山です。",
-            exampleReading: "にほんでいちばんたかいやまです。",
-            exampleTranslation: "是日本最高的山。"
-          }
-        ]
-      };
-    }
-  } else {
-    mockData = {
-      textAnswer: "（離線模式）請先在設定中配置 VITE_GEMINI_API_KEY 金鑰來體驗真實 AI 效果喔！",
-      detectedType: "DAILY_AFFAIRS",
-      sources: []
+      ]
     };
+  } else if (contentStr.includes("reading material") || contentStr.includes("readingSchema") || contentStr.includes("analyzeReadingText")) {
+    mockData = {
+      title: "日本の四季と文化 (日本的四季與文化)",
+      content: "日本には美しい四季があります。春には桜が咲き、夏には各地でお祭りが開かれます。秋は紅葉が鮮やかで、冬には雪景色が広がります。自然の移り変わりを感じながら生活することは、日本の伝統的な美意識と深く結びついています。",
+      translation: "日本擁有美麗的四季。春天櫻花盛開，夏天各地會舉辦祭典。秋天楓葉鮮紅耀眼，冬天則是一片銀白雪景。在感受自然季節更迭的同時度日，與日本傳統的美學意識有著深厚的連結。",
+      tokens: [
+        {
+          text: "四季",
+          dictionaryForm: "四季",
+          reading: "しき",
+          meaning: "四季、春夏秋冬",
+          type: "VOCAB",
+          jlpt: "N3",
+          partOfSpeech: "名詞",
+          pitchAccent: "頭高型 [1]",
+          exampleSentence: "京都の四季はそれぞれ独特の風情があります。",
+          exampleReading: "きょうとのしきはそれぞれどくとくのふうぜいがあります。",
+          exampleTranslation: "京都的四季各有其獨特的風情。",
+          examples: [
+            {
+              sentence: "京都の四季はそれぞれ独特の風情があります。",
+              reading: "きょうとのしきはそれぞれどくとくのふうぜいがあります。",
+              translation: "京都的四季各有其獨特的風情。"
+            }
+          ]
+        },
+        {
+          text: "咲き",
+          dictionaryForm: "咲く",
+          reading: "さく",
+          meaning: "綻放、開花",
+          type: "VOCAB",
+          jlpt: "N5",
+          partOfSpeech: "五段動詞",
+          pitchAccent: "平板型 [0]",
+          exampleSentence: "庭に色鮮やかな花がたくさん咲いています。",
+          exampleReading: "にわにいろあざやかなはながたくさんさいています。",
+          exampleTranslation: "院子裡盛開著許多色彩鮮豔的花朵。",
+          examples: [
+            {
+              sentence: "庭に色鮮やかな花がたくさん咲いています。",
+              reading: "にわにいろあざやかなはながたくさんさいています。",
+              translation: "院子裡盛開著許多色彩鮮豔的花朵。"
+            }
+          ]
+        },
+        {
+          text: "～ながら",
+          dictionaryForm: "～ながら",
+          reading: "～ながら",
+          meaning: "一邊...一邊... (伴隨)",
+          type: "GRAMMAR",
+          jlpt: "N4",
+          partOfSpeech: "接續助詞",
+          pitchAccent: "平板型 [0]",
+          exampleSentence: "ラジオを聞きながら掃除をします。",
+          exampleReading: "らじおをききながらそうじをします。",
+          exampleTranslation: "一邊聽收音機一邊打掃。",
+          examples: [
+            {
+              sentence: "ラジオを聞きながら掃除をします。",
+              reading: "らじおをききながらそうじをします。",
+              translation: "一邊聽收音機一邊打掃。"
+            }
+          ]
+        }
+      ]
+    };
+  } else {
+    mockData = [
+      {
+        word: "約束",
+        reading: "やくそく",
+        meaning: "約定、承諾",
+        pitchAccent: "平板型 [0]",
+        partOfSpeech: "名詞、他動詞 (サ變)",
+        exampleSentence: "彼と明日会う約束をしました。",
+        exampleReading: "かれとあしたあうやくそくをしました。",
+        exampleTranslation: "我跟他約好了明天見面。",
+        examples: [
+          {
+            sentence: "彼と明日会う約束をしました。",
+            reading: "かれとあしたあうやくそくをしました。",
+            translation: "我跟他約好了明天見面。"
+          },
+          {
+            sentence: "どんな小さな約束も守るべきです。",
+            reading: "どんなちいさなやくそくもまもるべきです。",
+            translation: "無論多小的約定都應該遵守。"
+          }
+        ]
+      }
+    ];
   }
 
   return {
@@ -629,38 +674,28 @@ const mockGenerateContent = async (args: any) => {
   };
 };
 
-const ai = new Proxy({} as any, {
-  get(target, prop) {
-    if (
-      typeof prop === 'symbol' ||
-      prop === 'then' ||
-      prop === 'toJSON' ||
-      prop === 'constructor' ||
-      prop === 'prototype'
-    ) {
-      return undefined;
-    }
-
-    const key = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
-    if (!key) {
-      if (prop === 'models') {
-        return {
+const getAiInstance = () => {
+  const apiKey = (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) || (import.meta as any)?.env?.VITE_GEMINI_API_KEY || "";
+  
+  if (!globalAiInstance) {
+    if (apiKey) {
+      globalAiInstance = new GoogleGenAI({ apiKey });
+    } else {
+      globalAiInstance = {
+        models: {
           generateContent: mockGenerateContent
-        };
-      }
-      return undefined;
+        }
+      } as any;
     }
-
-    if (!globalAiInstance) {
-      globalAiInstance = new GoogleGenAI({ apiKey: key });
-    }
-    const val = (globalAiInstance as any)[prop];
-    if (typeof val === 'function') {
-      return val.bind(globalAiInstance);
-    }
-    return val;
   }
-}) as unknown as GoogleGenAI;
+  return globalAiInstance!;
+};
+
+const ai = {
+  get models() {
+    return getAiInstance().models;
+  }
+};
 
 // --- WORD SCHEMA ---
 const wordDefinitionSchema = {
@@ -668,42 +703,29 @@ const wordDefinitionSchema = {
   items: {
     type: Type.OBJECT,
     properties: {
-      word: { type: Type.STRING, description: "The Japanese word (Kanji or Kana)" },
-      reading: { type: Type.STRING, description: "The Hiragana reading of the word" },
-      pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
-      partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, 他動詞, 自動詞, い形容詞, な形容詞, 副詞" },
+      word: { type: Type.STRING },
+      reading: { type: Type.STRING, description: "Hiragana/Katakana reading" },
+      pitchAccent: { type: Type.STRING, description: "e.g., 平板型 [0], 頭高型 [1], 中高型 [2]" },
       meaning: { type: Type.STRING, description: "Traditional Chinese meaning" },
+      partOfSpeech: { type: Type.STRING, description: "e.g., 名詞, 五段動詞, 一段動詞, い形容詞" },
+      exampleSentence: { type: Type.STRING, description: "Primary natural Japanese example sentence" },
+      exampleReading: { type: Type.STRING, description: "Reading of primary example sentence" },
+      exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of primary example sentence" },
       examples: {
         type: Type.ARRAY,
-        description: "2 to 3 natural Japanese example sentences with readings and Chinese translations",
+        description: "2 to 3 natural Japanese example sentences with readings and Traditional Chinese translations",
         items: {
           type: Type.OBJECT,
           properties: {
-            sentence: { type: Type.STRING, description: "Japanese sentence" },
+            sentence: { type: Type.STRING, description: "Japanese example sentence" },
             reading: { type: Type.STRING, description: "Hiragana reading of sentence" },
             translation: { type: Type.STRING, description: "Traditional Chinese translation" }
           },
           required: ["sentence", "reading", "translation"]
         }
-      },
-      exampleSentence: { type: Type.STRING, description: "First Japanese example sentence" },
-      exampleReading: { type: Type.STRING, description: "Hiragana reading of the example sentence" },
-      exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the example sentence" },
-      sentenceBreakdown: {
-        type: Type.ARRAY,
-        description: "A list of key vocabulary words found in the example sentence",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            word: { type: Type.STRING, description: "The word as it appears or dictionary form" },
-            reading: { type: Type.STRING, description: "Hiragana reading" },
-            meaning: { type: Type.STRING, description: "Brief Chinese meaning" }
-          },
-          required: ["word", "reading", "meaning"]
-        }
       }
     },
-    required: ["word", "reading", "meaning", "exampleSentence", "exampleReading", "exampleTranslation"],
+    required: ["word", "reading", "meaning", "exampleSentence", "exampleTranslation"],
   },
 };
 
@@ -713,36 +735,36 @@ const grammarSchema = {
   items: {
     type: Type.OBJECT,
     properties: {
-      grammarPoint: { type: Type.STRING, description: "The grammar pattern (e.g., ～ことになる)" },
-      connection: { type: Type.STRING, description: "Detailed connection rule (e.g., 動詞連用形 / 去ます + 變化, 名詞 + の, 動詞辭書形 + ...)" },
+      grammarPoint: { type: Type.STRING, description: "Canonical grammar point" },
+      connection: { type: Type.STRING, description: "Conjugation rules (接續規則)" },
       meaning: { type: Type.STRING, description: "Meaning in Traditional Chinese" },
-      explanation: { type: Type.STRING, description: "Detailed explanation of nuance and usage in Traditional Chinese" },
+      explanation: { type: Type.STRING, description: "Detailed explanation and nuances" },
       examples: {
         type: Type.ARRAY,
-        description: "2 to 3 natural Japanese example sentences",
+        description: "2 to 3 practical example sentences with word breakdown",
         items: {
           type: Type.OBJECT,
           properties: {
-            sentence: { type: Type.STRING, description: "Japanese example sentence" },
-            reading: { type: Type.STRING, description: "Hiragana reading of the sentence" },
-            translation: { type: Type.STRING, description: "Traditional Chinese translation" },
+            sentence: { type: Type.STRING },
+            reading: { type: Type.STRING },
+            translation: { type: Type.STRING },
             breakdown: {
               type: Type.ARRAY,
-              description: "Key vocabulary words used in this sentence with reading and Chinese meaning",
+              description: "2 to 4 key vocabulary words used in this sentence",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  word: { type: Type.STRING, description: "Japanese word as it appears or dictionary form" },
-                  reading: { type: Type.STRING, description: "Hiragana reading" },
-                  meaning: { type: Type.STRING, description: "Traditional Chinese meaning" }
+                  word: { type: Type.STRING },
+                  reading: { type: Type.STRING },
+                  meaning: { type: Type.STRING }
                 },
                 required: ["word", "reading", "meaning"]
               }
             }
           },
-          required: ["sentence", "reading", "translation"],
-        },
-      },
+          required: ["sentence", "reading", "translation"]
+        }
+      }
     },
     required: ["grammarPoint", "connection", "meaning", "explanation", "examples"],
   },
@@ -835,12 +857,69 @@ const quizSchema = {
 };
 
 export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefinition[]> => {
+  const trimmed = wordsInput.trim();
+  if (!trimmed) return [];
+  const cacheKey = `gogo_cache_${trimmed}`;
+
+  // 【第 1 階防線】：優先讀取 localStorage 快取 (gogo_cache_搜尋關鍵字)
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to read word cache from localStorage:", e);
+    }
+  }
+
+  // 【第 2 階防線】：嘗試讀取 /data/commonWords.json
+  const dict = commonWordsData as Record<string, { word: string; furigana: string; meanings: string[]; pitch?: string }>;
+  const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
+
+  if (tokens.length > 0) {
+    const localFound: WordDefinition[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const entry = dict[t];
+      if (entry) {
+        localFound.push({
+          id: `w-common-${t}-${i}`,
+          word: entry.word || t,
+          reading: entry.furigana || '',
+          meaning: Array.isArray(entry.meanings) ? entry.meanings.join('；') : (entry.meanings || ''),
+          pitchAccent: entry.pitch || '',
+          partOfSpeech: '',
+          exampleSentence: '',
+          exampleTranslation: '',
+          examples: []
+        });
+      }
+    }
+
+    // 若輸入之單字全部於 commonWords.json 中命中
+    if (localFound.length > 0 && localFound.length === tokens.length) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem(cacheKey, JSON.stringify(localFound));
+        } catch (e) {
+          console.warn("Failed to write to localStorage:", e);
+        }
+      }
+      return localFound;
+    }
+  }
+
+  // 【第 3 階防線】：若上述皆無，才呼叫 Gemini API 進行解析
   const response = await ai.models.generateContent({
     model: "gemini-3.8-flash",
     contents: `
       You are an expert Japanese linguist and dictionary lexicographer.
       Analyze the following Japanese word(s) or input:
-      "${wordsInput}"
+      "${trimmed}"
 
       MANDATORY REQUIREMENTS:
       1. Provide accurate Hiragana reading (標音).
@@ -855,7 +934,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
     config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
   });
   const data = JSON.parse(response.text) as WordDefinition[];
-  return data.map((d, i) => {
+  const formattedData = data.map((d, i) => {
     // If examples array is missing or empty, build it from exampleSentence
     let exList = d.examples && d.examples.length > 0 ? d.examples : [];
     if (exList.length === 0 && d.exampleSentence) {
@@ -871,6 +950,17 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
       examples: exList
     };
   });
+
+  // 解析成功後自動存入 localStorage 快取
+  if (typeof window !== 'undefined' && window.localStorage && formattedData.length > 0) {
+    try {
+      window.localStorage.setItem(cacheKey, JSON.stringify(formattedData));
+    } catch (e) {
+      console.warn("Failed to write word cache to localStorage:", e);
+    }
+  }
+
+  return formattedData;
 };
 
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
@@ -1046,20 +1136,15 @@ export const generateQuizFromContent = async (
               - 錯誤選項（B、C、D）必須為明顯的文法錯誤或不自然接續，不得僅依靠前後主詞或名詞對調來充當選項。
          - Follow this strict formatting structure for ordering questions:
            - **'sentence'**: The Japanese template sentence with context and 4 numbered underlines:
-             e.g., "（駅の改札が混雑中なので、）
-①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
-             Use newline '
-' between the preceding context and the blank underlines to ensure clean line breaks.
+             e.g., "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
+             Use newline '\n' between the preceding context and the blank underlines to ensure clean line breaks.
            - **'scrambleItems'**: Array of 4 unordered segments to arrange, WITHOUT numeric prefixes:
              e.g., ["人が", "少なく", "なって", "から"]
              Must be pure words/phrases WITHOUT "1." or "2." prefixes and WITHOUT ending periods (。).
            - **'instruction'**: Standard JLPT instruction string:
              "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
            - **'question'**: Full integrated question text for backward compatibility:
-             "（駅の改札が混雑中なので、）
-①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。
-【1. 人が　2. 少なく　3. なって　4. から】
-★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
+             "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。\n【1. 人が　2. 少なく　3. なって　4. から】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
            - **'options'**: Provide the 4 candidate words from 'scrambleItems' without alphabetical or numerical prefixes (e.g. ["人が", "少なく", "なって", "から"]). 'correctAnswerIndex' must accurately point to the index (0-3) of the word that belongs in the ★ (3rd space) position!
            - **'explanation'**: MUST provide:
              1. 完整正確句子 (e.g. 「駅の改札が混雑中なので、人が少なく（2）なって（3）から（4）行きましょう。」)
@@ -1073,9 +1158,7 @@ export const generateQuizFromContent = async (
              - The generated 'context' (spoken script / 對話原文) **MUST NOT contain any XML, HTML, or SSML tags** (strictly NO <prosody>, NO </prosody>, NO <voice>, NO XML tags whatsoever).
              - The transcript must contain ONLY pure, clean Japanese text with speaker markers (e.g. "女：", "男：").
              - Example format:
-               "女：昨日、大切な書類をなくしちゃって本当に焦ったよ。
-男：えっ、本当？見つかったの？
-女：うん、同僚の机の上に置き忘れていただけだったの。"
+               "女：昨日、大切な書類をなくしちゃって本当に焦ったよ。\n男：えっ、本当？見つかったの？\n女：うん、同僚の机の上に置き忘れていただけだったの。"
            - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人在對話中討論了什麼？" or "女生最後在哪裡找到重要文件？").
            
       5. **Type: "reading"** - READING COMPREHENSION (閱讀理解題):
@@ -1294,8 +1377,6 @@ export const generateDailyStudyQuiz = async (
   });
 };
 
-
-
 // --- LISTENING SCHEMA ---
 const listeningSchema = {
   type: Type.OBJECT,
@@ -1445,6 +1526,3 @@ export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalys
   });
   return JSON.parse(response.text) as DiaryAnalysisResult;
 };
-
-
-
