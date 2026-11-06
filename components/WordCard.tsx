@@ -107,9 +107,16 @@ export const WordCard: React.FC<WordCardProps> = ({
             <h3 className="text-[20px] font-bold text-[#2B303A] tracking-tight hover:text-[#4F6375] transition-colors font-jp">
               {data.word}
             </h3>
-            <p className="text-sm text-[#6C757D] font-medium mt-0.5 font-jp">
-              {data.reading}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <p className="text-sm text-[#6C757D] font-medium font-jp">
+                {data.reading}
+              </p>
+              {data.romaji && (
+                <span className="text-xs text-[#868E96] font-mono tracking-wide">
+                  [{data.romaji}]
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Meaning */}
@@ -211,9 +218,16 @@ export const WordCard: React.FC<WordCardProps> = ({
                   <h3 className="text-[20px] font-bold text-[#2B303A] tracking-tight font-jp">
                     {data.word}
                   </h3>
-                  <p className="text-sm text-[#6C757D] font-medium font-jp mt-0.5">
-                    {data.reading}
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <p className="text-sm text-[#6C757D] font-medium font-jp">
+                      {data.reading}
+                    </p>
+                    {data.romaji && (
+                      <span className="text-xs text-[#868E96] font-mono tracking-wide">
+                        [{data.romaji}]
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">

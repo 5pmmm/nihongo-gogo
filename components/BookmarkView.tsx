@@ -200,9 +200,16 @@ export const BookmarkView: React.FC<BookmarkViewProps> = ({ onStartQuizWithBookm
                       {item.title}
                     </h3>
                     {isWord && wordData?.reading && (
-                      <p className="text-sm text-[#6C757D] font-medium mt-0.5 font-jp">
-                        {wordData.reading}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <p className="text-sm text-[#6C757D] font-medium font-jp">
+                          {wordData.reading}
+                        </p>
+                        {wordData.romaji && (
+                          <span className="text-xs text-[#868E96] font-mono tracking-wide">
+                            [{wordData.romaji}]
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 

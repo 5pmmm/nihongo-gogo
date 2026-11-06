@@ -2,8 +2,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
 
-let globalAiInstance: GoogleGenAI | null = null;
-let inMemoryCommonWords: Record<string, { word: string; furigana: string; meanings: string[]; pitch?: string }> | null = null;
+export interface CommonWordEntry {
+  word: string;
+  furigana: string;
+  meanings: string[];
+  pitch?: string;
+  examples?: string[];
+  romaji?: string;
+}
+
+let inMemoryCommonWords: Record<string, CommonWordEntry> | null = null;
+let inMemoryCommonWordsIndex: Map<string, CommonWordEntry> | null = null;
 
 // Mock Response Generator for Offline Support or Headless Environments without Keys
 const mockGenerateContent = async (args: any) => {
@@ -630,6 +639,8 @@ const mockGenerateContent = async (args: any) => {
   };
 };
 
+let globalAiInstance: GoogleGenAI | null = null;
+
 const ai = new Proxy({} as any, {
   get(target, prop) {
     if (
@@ -671,6 +682,7 @@ const wordDefinitionSchema = {
     properties: {
       word: { type: Type.STRING, description: "The Japanese word (Kanji or Kana)" },
       reading: { type: Type.STRING, description: "The Hiragana reading of the word" },
+      romaji: { type: Type.STRING, description: "Hepburn Romaji pronunciation of the word (e.g. watashi, tokei, taberu)" },
       pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
       partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, 他動詞, 自動詞, い形容詞, な形容詞, 副詞" },
       meaning: { type: Type.STRING, description: "Traditional Chinese meaning" },
@@ -835,6 +847,170 @@ const quizSchema = {
   },
 };
 
+/**
+ * 將日文平假名／片假名轉換為標準赫本式羅馬拼音 (Hepburn Romaji)
+ */
+export const toHepburnRomaji = (kana: string): string => {
+  if (!kana) return '';
+  // 將片假名轉換為平假名進行統一比對
+  const h = kana.replace(/[\u30a1-\u30f6]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+
+  const digraphs: Record<string, string> = {
+    'きゃ': 'kya', 'きゅ': 'kyu', 'きょ': 'kyo',
+    'しゃ': 'sha', 'しゅ': 'shu', 'しょ': 'sho',
+    'ちゃ': 'cha', 'ちゅ': 'chu', 'ちょ': 'cho',
+    'にゃ': 'nya', 'にゅ': 'nyu', 'にょ': 'nyo',
+    'ひゃ': 'hya', 'ひゅ': 'hyu', 'ひょ': 'hyo',
+    'みゃ': 'mya', 'みゅ': 'myu', 'みょ': 'myo',
+    'りゃ': 'rya', 'りゅ': 'ryu', 'りょ': 'ryo',
+    'ぎゃ': 'gya', 'ぎゅ': 'gyu', 'ぎょ': 'gyo',
+    'じゃ': 'ja', 'じゅ': 'ju', 'じょ': 'jo',
+    'びゃ': 'bya', 'びゅ': 'byu', 'びょ': 'byo',
+    'ぴゃ': 'pya', 'ぴゅ': 'pyu', 'ぴょ': 'pyo',
+    'しぇ': 'she', 'ちぇ': 'che', 'じぇ': 'je',
+    'てぃ': 'ti', 'でぃ': 'di', 'ふぁ': 'fa',
+    'ふぃ': 'fi', 'ふぇ': 'fe', 'ふぉ': 'fo',
+    'うぃ': 'wi', 'うぇ': 'we', 'うぉ': 'wo'
+  };
+
+  const monographs: Record<string, string> = {
+    'あ': 'a', 'い': 'i', 'う': 'u', 'え': 'e', 'お': 'o',
+    'か': 'ka', 'き': 'ki', 'く': 'ku', 'け': 'ke', 'こ': 'ko',
+    'さ': 'sa', 'し': 'shi', 'す': 'su', 'せ': 'se', 'そ': 'so',
+    'た': 'ta', 'ち': 'chi', 'つ': 'tsu', 'て': 'te', 'と': 'to',
+    'な': 'na', 'に': 'ni', 'ぬ': 'nu', 'ね': 'ne', 'の': 'no',
+    'は': 'ha', 'ひ': 'hi', 'ふ': 'fu', 'へ': 'he', 'ほ': 'ho',
+    'ま': 'ma', 'み': 'mi', 'む': 'mu', 'め': 'me', 'も': 'mo',
+    'や': 'ya', 'ゆ': 'yu', 'よ': 'yo',
+    'ら': 'ra', 'り': 'ri', 'る': 'ru', 'れ': 're', 'ろ': 'ro',
+    'わ': 'wa', 'を': 'o', 'ん': 'n',
+    'が': 'ga', 'ぎ': 'gi', 'ぐ': 'gu', 'げ': 'ge', 'ご': 'go',
+    'ざ': 'za', 'じ': 'ji', 'ず': 'zu', 'ぜ': 'ze', 'ぞ': 'zo',
+    'だ': 'da', 'ぢ': 'ji', 'づ': 'zu', 'で': 'de', 'ど': 'do',
+    'ば': 'ba', 'び': 'bi', 'ぶ': 'bu', 'べ': 'be', 'ぼ': 'bo',
+    'ぱ': 'pa', 'ぴ': 'pi', 'ぷ': 'pu', 'ぺ': 'pe', 'ぽ': 'po',
+    'ぁ': 'a', 'ぃ': 'i', 'ぅ': 'u', 'ぇ': 'e', 'ぉ': 'o'
+  };
+
+  let result = '';
+  let i = 0;
+  while (i < h.length) {
+    if (i + 1 < h.length) {
+      const two = h.slice(i, i + 2);
+      if (digraphs[two]) {
+        result += digraphs[two];
+        i += 2;
+        continue;
+      }
+    }
+
+    if (h[i] === 'っ') {
+      if (i + 1 < h.length) {
+        let nextRomaji = '';
+        if (i + 2 < h.length && digraphs[h.slice(i + 1, i + 3)]) {
+          nextRomaji = digraphs[h.slice(i + 1, i + 3)];
+        } else if (monographs[h[i + 1]]) {
+          nextRomaji = monographs[h[i + 1]];
+        }
+        if (nextRomaji) {
+          result += nextRomaji.startsWith('ch') ? 't' : nextRomaji[0];
+        }
+      }
+      i++;
+      continue;
+    }
+
+    if (h[i] === 'ー') {
+      const lastChar = result.slice(-1);
+      if (/[aeiou]/.test(lastChar)) {
+        result += lastChar;
+      }
+      i++;
+      continue;
+    }
+
+    if (monographs[h[i]]) {
+      result += monographs[h[i]];
+    } else {
+      result += h[i];
+    }
+    i++;
+  }
+
+  return result;
+};
+
+/**
+ * 建立 commonWords 多重維度倒排索引（支援 Key、word 漢字、furigana 假名、romaji 拼音搜尋）
+ */
+const buildCommonWordsIndex = (dict: Record<string, CommonWordEntry>): Map<string, CommonWordEntry> => {
+  const index = new Map<string, CommonWordEntry>();
+  for (const key of Object.keys(dict)) {
+    const entry = dict[key];
+    if (!entry) continue;
+
+    const trimmedKey = key.trim();
+    if (trimmedKey) {
+      index.set(trimmedKey, entry);
+      index.set(trimmedKey.toLowerCase(), entry);
+    }
+    if (entry.word) {
+      const w = entry.word.trim();
+      index.set(w, entry);
+      index.set(w.toLowerCase(), entry);
+    }
+    if (entry.furigana) {
+      const f = entry.furigana.trim();
+      index.set(f, entry);
+      index.set(f.toLowerCase(), entry);
+    }
+    if (entry.romaji) {
+      const r = entry.romaji.trim().toLowerCase();
+      index.set(r, entry);
+    }
+  }
+  return index;
+};
+
+/**
+ * 將本地詞庫物件轉換為 WordDefinition 介面物件（確保包含 Romaji 拼音標示）
+ */
+const convertEntryToWordDefinition = (entry: CommonWordEntry, token: string, index: number): WordDefinition => {
+  let exSentence = '';
+  let exTrans = '';
+  const exList: { sentence: string; reading: string; translation: string }[] = [];
+  if (entry.examples && Array.isArray(entry.examples) && entry.examples.length > 0) {
+    entry.examples.forEach(exStr => {
+      const m = exStr.match(/^(.*?)[(（](.+?)[)）]\s*$/);
+      if (m) {
+        if (!exSentence) exSentence = m[1].trim();
+        if (!exTrans) exTrans = m[2].trim();
+        exList.push({ sentence: m[1].trim(), reading: '', translation: m[2].trim() });
+      } else {
+        if (!exSentence) exSentence = exStr.trim();
+        exList.push({ sentence: exStr.trim(), reading: '', translation: '' });
+      }
+    });
+  }
+
+  const reading = entry.furigana || '';
+  const word = entry.word || token;
+  const romaji = entry.romaji || toHepburnRomaji(reading || word);
+
+  return {
+    id: `w-common-${token}-${index}`,
+    word,
+    reading,
+    romaji,
+    meaning: Array.isArray(entry.meanings) ? entry.meanings.join('；') : (entry.meanings || ''),
+    pitchAccent: entry.pitch || '平板型 [0]',
+    partOfSpeech: '',
+    exampleSentence: exSentence,
+    exampleTranslation: exTrans,
+    examples: exList
+  };
+};
+
 export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefinition[]> => {
   const trimmed = wordsInput.trim();
   if (!trimmed) return [];
@@ -847,7 +1023,11 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // 確保每筆快取物件均帶有 Romaji 拼音標示
+          return parsed.map((item: WordDefinition) => ({
+            ...item,
+            romaji: item.romaji || toHepburnRomaji(item.reading || item.word)
+          }));
         }
       }
     } catch (e) {
@@ -855,9 +1035,9 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
     }
   }
 
-  // 【第 2 階防線】：非同步讀取 public 目錄中的 /data/commonWords.json
+  // 【第 2 階防線】：離線庫優先 - 非同步讀取 public 目錄中的 /data/commonWords.json
   try {
-    let wordBank = inMemoryCommonWords;
+    if (!inMemoryCommonWords || !inMemoryCommonWordsIndex) {
       const baseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.BASE_URL) || '/';
       const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
       let res = await fetch(`${cleanBase}data/commonWords.json`);
@@ -865,52 +1045,40 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
         res = await fetch('/data/commonWords.json');
       }
       if (res.ok) {
-        wordBank = await res.json();
+        const wordBank = (await res.json()) as Record<string, CommonWordEntry>;
         inMemoryCommonWords = wordBank;
+        inMemoryCommonWordsIndex = buildCommonWordsIndex(wordBank);
+      }
+    }
+
+    if (inMemoryCommonWordsIndex) {
+      // 1. 單字整體直接比對（優先搜尋 Key、word 漢字或 furigana 假名）
+      const directMatch = inMemoryCommonWordsIndex.get(trimmed) || inMemoryCommonWordsIndex.get(trimmed.toLowerCase());
+      if (directMatch) {
+        const singleFound = [convertEntryToWordDefinition(directMatch, trimmed, 0)];
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            window.localStorage.setItem(cacheKey, JSON.stringify(singleFound));
+          } catch (e) {
+            console.warn("Failed to write to localStorage:", e);
+          }
+        }
+        return singleFound;
       }
 
-    if (wordBank) {
-      const dict = wordBank as Record<string, { word: string; furigana: string; meanings: string[]; pitch?: string; examples?: string[] }>;
+      // 2. 多單字切分比對（支援空白、換行、逗號分隔）
       const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
-
       if (tokens.length > 0) {
         const localFound: WordDefinition[] = [];
         for (let i = 0; i < tokens.length; i++) {
           const t = tokens[i];
-          const entry = dict[t];
+          const entry = inMemoryCommonWordsIndex.get(t) || inMemoryCommonWordsIndex.get(t.toLowerCase());
           if (entry) {
-            let exSentence = '';
-            let exTrans = '';
-            const exList: { sentence: string; reading: string; translation: string }[] = [];
-            if (entry.examples && Array.isArray(entry.examples) && entry.examples.length > 0) {
-              entry.examples.forEach(exStr => {
-                const m = exStr.match(/^(.*?)[(（](.+?)[)）]\s*$/);
-                if (m) {
-                  if (!exSentence) exSentence = m[1].trim();
-                  if (!exTrans) exTrans = m[2].trim();
-                  exList.push({ sentence: m[1].trim(), reading: '', translation: m[2].trim() });
-                } else {
-                  if (!exSentence) exSentence = exStr.trim();
-                  exList.push({ sentence: exStr.trim(), reading: '', translation: '' });
-                }
-              });
-            }
-
-            localFound.push({
-              id: `w-common-${t}-${i}`,
-              word: entry.word || t,
-              reading: entry.furigana || '',
-              meaning: Array.isArray(entry.meanings) ? entry.meanings.join('；') : (entry.meanings || ''),
-              pitchAccent: entry.pitch || '',
-              partOfSpeech: '',
-              exampleSentence: exSentence,
-              exampleTranslation: exTrans,
-              examples: exList
-            });
+            localFound.push(convertEntryToWordDefinition(entry, t, i));
           }
         }
 
-        // 若輸入之單字全部於 commonWords.json 中命中
+        // 若輸入之單字全部於 commonWords.json 中命中，立刻回傳並寫入快取 (0 秒呈現)
         if (localFound.length > 0 && localFound.length === tokens.length) {
           if (typeof window !== 'undefined' && window.localStorage) {
             try {
@@ -940,11 +1108,12 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
 
         MANDATORY REQUIREMENTS:
         1. Provide accurate Hiragana reading (標音).
-        2. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
-        3. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
-        4. Provide clear, concise Traditional Chinese definition (繁體中文).
-        5. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
-        6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
+        2. Provide standard Hepburn Romaji pronunciation (羅馬拼音).
+        3. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
+        4. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
+        5. Provide clear, concise Traditional Chinese definition (繁體中文).
+        6. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
+        7. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
         
         Response Language: Traditional Chinese (繁體中文).
       `,
@@ -975,6 +1144,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
       return {
         ...d,
         id: d.id || `w-${Date.now()}-${i}`,
+        romaji: d.romaji || toHepburnRomaji(d.reading || d.word),
         examples: exList
       };
     });
@@ -1002,6 +1172,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
       id: `w-fallback-${Date.now()}-${i}`,
       word: tok,
       reading: tok,
+      romaji: toHepburnRomaji(tok),
       meaning: "（離線模式）連線逾時或暫時無法存取線上服務，提供基礎單字卡以供學習。",
       pitchAccent: "平板型 [0]",
       partOfSpeech: "詞彙",
@@ -1022,7 +1193,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
 };
 
 /**
- * lookupJapanese: 字典單字解析核心函式（支援三階防線快取、8 秒逾時防卡死與離線自動降級）
+ * lookupJapanese: 字典單字解析核心函式（支援增強多維度比對、Romaji 自動轉換、三階防線快取、8 秒逾時防卡死與離線自動降級）
  */
 export const lookupJapanese = fetchWordDefinitions;
 

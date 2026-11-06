@@ -15,6 +15,7 @@ export interface WordDefinition {
   id?: string;
   word: string;
   reading: string;
+  romaji?: string;
   pitchAccent?: string; // 重音 (e.g. 平板型 [0], 頭高型 [1])
   meaning: string;
   partOfSpeech?: string;
