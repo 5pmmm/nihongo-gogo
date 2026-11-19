@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
+import commonWordsData from '../public/data/commonWords.json';
 
 export interface CommonWordEntry {
   word: string;
@@ -10,9 +11,6 @@ export interface CommonWordEntry {
   examples?: string[];
   romaji?: string;
 }
-
-let inMemoryCommonWords: Record<string, CommonWordEntry> | null = null;
-let inMemoryCommonWordsIndex: Map<string, CommonWordEntry> | null = null;
 
 // Mock Response Generator for Offline Support or Headless Environments without Keys
 const mockGenerateContent = async (args: any) => {
@@ -941,38 +939,6 @@ export const toHepburnRomaji = (kana: string): string => {
 };
 
 /**
- * 建立 commonWords 多重維度倒排索引（支援 Key、word 漢字、furigana 假名、romaji 拼音搜尋）
- */
-const buildCommonWordsIndex = (dict: Record<string, CommonWordEntry>): Map<string, CommonWordEntry> => {
-  const index = new Map<string, CommonWordEntry>();
-  for (const key of Object.keys(dict)) {
-    const entry = dict[key];
-    if (!entry) continue;
-
-    const trimmedKey = key.trim();
-    if (trimmedKey) {
-      index.set(trimmedKey, entry);
-      index.set(trimmedKey.toLowerCase(), entry);
-    }
-    if (entry.word) {
-      const w = entry.word.trim();
-      index.set(w, entry);
-      index.set(w.toLowerCase(), entry);
-    }
-    if (entry.furigana) {
-      const f = entry.furigana.trim();
-      index.set(f, entry);
-      index.set(f.toLowerCase(), entry);
-    }
-    if (entry.romaji) {
-      const r = entry.romaji.trim().toLowerCase();
-      index.set(r, entry);
-    }
-  }
-  return index;
-};
-
-/**
  * 將本地詞庫物件轉換為 WordDefinition 介面物件（確保包含 Romaji 拼音標示）
  */
 const convertEntryToWordDefinition = (entry: CommonWordEntry, token: string, index: number): WordDefinition => {
@@ -1011,10 +977,10 @@ const convertEntryToWordDefinition = (entry: CommonWordEntry, token: string, ind
   };
 };
 
-export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefinition[]> => {
-  const trimmed = wordsInput.trim();
-  if (!trimmed) return [];
-  const cacheKey = `gogo_cache_${trimmed}`;
+export const fetchWordDefinitions = async (query: string): Promise<WordDefinition[]> => {
+  const queryStr = query.trim();
+  if (!queryStr) return [];
+  const cacheKey = `gogo_cache_${queryStr}`;
 
   // 【第 1 階防線】：優先讀取 localStorage 快取 (gogo_cache_搜尋關鍵字)
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -1035,76 +1001,62 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
     }
   }
 
-  // 【第 2 階防線】：離線庫優先 - 非同步讀取 public 目錄中的 /data/commonWords.json
-  try {
-    if (!inMemoryCommonWords || !inMemoryCommonWordsIndex) {
-      const baseUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.BASE_URL) || '/';
-      const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-      let res = await fetch(`${cleanBase}data/commonWords.json`);
-      if (!res.ok) {
-        res = await fetch('/data/commonWords.json');
+  // 【第 2 階防線】：離線庫優先 - 直接讀取靜態匯入的 commonWordsData 物件（免除 fetch 路徑問題）
+  const wordBank = commonWordsData as Record<string, CommonWordEntry>;
+  const matched =
+    wordBank[queryStr] ||
+    (Object.values(wordBank) as CommonWordEntry[]).find(
+      (item: any) => item.word === queryStr || item.furigana === queryStr
+    );
+
+  if (matched) {
+    const singleFound = [convertEntryToWordDefinition(matched, queryStr, 0)];
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(cacheKey, JSON.stringify(singleFound));
+      } catch (e) {
+        console.warn("Failed to write to localStorage:", e);
       }
-      if (res.ok) {
-        const wordBank = (await res.json()) as Record<string, CommonWordEntry>;
-        inMemoryCommonWords = wordBank;
-        inMemoryCommonWordsIndex = buildCommonWordsIndex(wordBank);
+    }
+    return singleFound;
+  }
+
+  // 多單字切分比對（支援空白、換行、逗號分隔）
+  const tokens = queryStr.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
+  if (tokens.length > 1) {
+    const wordValues = Object.values(wordBank) as CommonWordEntry[];
+    const localFound: WordDefinition[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const entry =
+        wordBank[t] ||
+        wordValues.find((item: any) => item.word === t || item.furigana === t);
+      if (entry) {
+        localFound.push(convertEntryToWordDefinition(entry, t, i));
       }
     }
 
-    if (inMemoryCommonWordsIndex) {
-      // 1. 單字整體直接比對（優先搜尋 Key、word 漢字或 furigana 假名）
-      const directMatch = inMemoryCommonWordsIndex.get(trimmed) || inMemoryCommonWordsIndex.get(trimmed.toLowerCase());
-      if (directMatch) {
-        const singleFound = [convertEntryToWordDefinition(directMatch, trimmed, 0)];
-        if (typeof window !== 'undefined' && window.localStorage) {
-          try {
-            window.localStorage.setItem(cacheKey, JSON.stringify(singleFound));
-          } catch (e) {
-            console.warn("Failed to write to localStorage:", e);
-          }
-        }
-        return singleFound;
-      }
-
-      // 2. 多單字切分比對（支援空白、換行、逗號分隔）
-      const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
-      if (tokens.length > 0) {
-        const localFound: WordDefinition[] = [];
-        for (let i = 0; i < tokens.length; i++) {
-          const t = tokens[i];
-          const entry = inMemoryCommonWordsIndex.get(t) || inMemoryCommonWordsIndex.get(t.toLowerCase());
-          if (entry) {
-            localFound.push(convertEntryToWordDefinition(entry, t, i));
-          }
-        }
-
-        // 若輸入之單字全部於 commonWords.json 中命中，立刻回傳並寫入快取 (0 秒呈現)
-        if (localFound.length > 0 && localFound.length === tokens.length) {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-              window.localStorage.setItem(cacheKey, JSON.stringify(localFound));
-            } catch (e) {
-              console.warn("Failed to write to localStorage:", e);
-            }
-          }
-          return localFound;
+    // 若輸入之單字全部於 commonWordsData 中命中，立刻回傳並寫入快取 (0 秒呈現)
+    if (localFound.length === tokens.length) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem(cacheKey, JSON.stringify(localFound));
+        } catch (e) {
+          console.warn("Failed to write to localStorage:", e);
         }
       }
+      return localFound;
     }
-  } catch (e) {
-    console.warn("Failed to load /data/commonWords.json via fetch:", e);
   }
 
   // 【第 3 階防線】：若上述皆無，才呼叫 Gemini API 進行解析（配置 8 秒 Timeout 限制與離線防卡死降級）
-  const tokens = trimmed.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
-
   try {
     const apiCallPromise = ai.models.generateContent({
       model: "gemini-3.8-flash",
       contents: `
         You are an expert Japanese linguist and dictionary lexicographer.
         Analyze the following Japanese word(s) or input:
-        "${trimmed}"
+        "${queryStr}"
 
         MANDATORY REQUIREMENTS:
         1. Provide accurate Hiragana reading (標音).
@@ -1168,7 +1120,7 @@ export const fetchWordDefinitions = async (wordsInput: string): Promise<WordDefi
     );
 
     // 自動切換至離線 Mode，傳回預設的簡易解析卡片，防止頁面卡死在解析狀態
-    const fallbackList: WordDefinition[] = (tokens.length > 0 ? tokens : [trimmed]).map((tok, i) => ({
+    const fallbackList: WordDefinition[] = (tokens.length > 0 ? tokens : [queryStr]).map((tok, i) => ({
       id: `w-fallback-${Date.now()}-${i}`,
       word: tok,
       reading: tok,
