@@ -78,7 +78,7 @@ export const App: React.FC = () => {
       }
     } catch (e: any) {
       console.error(e);
-      setErrorMessage('解析失敗，請確認網路連線或稍後再試。');
+      setErrorMessage(e?.message || '解析失敗，請確認網路連線或稍後再試。');
     } finally {
       setLoading(false);
     }

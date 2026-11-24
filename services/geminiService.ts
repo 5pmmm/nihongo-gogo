@@ -1,16 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
-import commonWordsData from '../public/data/commonWords.json';
-
-export interface CommonWordEntry {
-  word: string;
-  furigana: string;
-  meanings: string[];
-  pitch?: string;
-  examples?: string[];
-  romaji?: string;
-}
 
 // Mock Response Generator for Offline Support or Headless Environments without Keys
 const mockGenerateContent = async (args: any) => {
@@ -637,6 +627,18 @@ const mockGenerateContent = async (args: any) => {
   };
 };
 
+const getGeminiApiKey = (): string => {
+  const viteKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || "";
+  if (viteKey && viteKey !== "undefined") return viteKey;
+  try {
+    const procKey = typeof process !== 'undefined' ? (process.env?.GEMINI_API_KEY || process.env?.API_KEY || "") : "";
+    if (procKey && procKey !== "undefined") return procKey;
+  } catch {
+    // Ignore if process is not defined in browser
+  }
+  return "";
+};
+
 let globalAiInstance: GoogleGenAI | null = null;
 
 const ai = new Proxy({} as any, {
@@ -651,7 +653,7 @@ const ai = new Proxy({} as any, {
       return undefined;
     }
 
-    const key = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
+    const key = getGeminiApiKey();
     if (!key) {
       if (prop === 'models') {
         return {
@@ -714,7 +716,7 @@ const wordDefinitionSchema = {
         }
       }
     },
-    required: ["word", "reading", "meaning", "exampleSentence", "exampleReading", "exampleTranslation"],
+    required: ["word", "reading", "romaji", "pitchAccent", "meaning", "exampleSentence", "exampleReading", "exampleTranslation"],
   },
 };
 
@@ -938,58 +940,18 @@ export const toHepburnRomaji = (kana: string): string => {
   return result;
 };
 
-/**
- * 將本地詞庫物件轉換為 WordDefinition 介面物件（確保包含 Romaji 拼音標示）
- */
-const convertEntryToWordDefinition = (entry: CommonWordEntry, token: string, index: number): WordDefinition => {
-  let exSentence = '';
-  let exTrans = '';
-  const exList: { sentence: string; reading: string; translation: string }[] = [];
-  if (entry.examples && Array.isArray(entry.examples) && entry.examples.length > 0) {
-    entry.examples.forEach(exStr => {
-      const m = exStr.match(/^(.*?)[(（](.+?)[)）]\s*$/);
-      if (m) {
-        if (!exSentence) exSentence = m[1].trim();
-        if (!exTrans) exTrans = m[2].trim();
-        exList.push({ sentence: m[1].trim(), reading: '', translation: m[2].trim() });
-      } else {
-        if (!exSentence) exSentence = exStr.trim();
-        exList.push({ sentence: exStr.trim(), reading: '', translation: '' });
-      }
-    });
-  }
-
-  const reading = entry.furigana || '';
-  const word = entry.word || token;
-  const romaji = entry.romaji || toHepburnRomaji(reading || word);
-
-  return {
-    id: `w-common-${token}-${index}`,
-    word,
-    reading,
-    romaji,
-    meaning: Array.isArray(entry.meanings) ? entry.meanings.join('；') : (entry.meanings || ''),
-    pitchAccent: entry.pitch || '平板型 [0]',
-    partOfSpeech: '',
-    exampleSentence: exSentence,
-    exampleTranslation: exTrans,
-    examples: exList
-  };
-};
-
 export const fetchWordDefinitions = async (query: string): Promise<WordDefinition[]> => {
   const queryStr = query.trim();
   if (!queryStr) return [];
   const cacheKey = `gogo_cache_${queryStr}`;
 
-  // 【第 1 階防線】：優先讀取 localStorage 快取 (gogo_cache_搜尋關鍵字)
+  // 1. 先檢查瀏覽器的 localStorage 快取，若以前查過就直接回傳結果（0 秒顯示）
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // 確保每筆快取物件均帶有 Romaji 拼音標示
           return parsed.map((item: WordDefinition) => ({
             ...item,
             romaji: item.romaji || toHepburnRomaji(item.reading || item.word)
@@ -1001,89 +963,57 @@ export const fetchWordDefinitions = async (query: string): Promise<WordDefinitio
     }
   }
 
-  // 【第 2 階防線】：離線庫優先 - 直接讀取靜態匯入的 commonWordsData 物件（免除 fetch 路徑問題）
-  const wordBank = commonWordsData as Record<string, CommonWordEntry>;
-  const matched =
-    wordBank[queryStr] ||
-    (Object.values(wordBank) as CommonWordEntry[]).find(
-      (item: any) => item.word === queryStr || item.furigana === queryStr
-    );
-
-  if (matched) {
-    const singleFound = [convertEntryToWordDefinition(matched, queryStr, 0)];
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        window.localStorage.setItem(cacheKey, JSON.stringify(singleFound));
-      } catch (e) {
-        console.warn("Failed to write to localStorage:", e);
-      }
-    }
-    return singleFound;
+  // 2. 若沒查過，檢查 API 金鑰並直接呼叫 Gemini API 進行完整日文解析
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("尚未設定 Gemini API 金鑰（請確認環境變數 VITE_GEMINI_API_KEY），無法查詢單字解析。");
   }
 
-  // 多單字切分比對（支援空白、換行、逗號分隔）
-  const tokens = queryStr.split(/[\s\n,、]+/).map(t => t.trim()).filter(Boolean);
-  if (tokens.length > 1) {
-    const wordValues = Object.values(wordBank) as CommonWordEntry[];
-    const localFound: WordDefinition[] = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      const entry =
-        wordBank[t] ||
-        wordValues.find((item: any) => item.word === t || item.furigana === t);
-      if (entry) {
-        localFound.push(convertEntryToWordDefinition(entry, t, i));
-      }
-    }
-
-    // 若輸入之單字全部於 commonWordsData 中命中，立刻回傳並寫入快取 (0 秒呈現)
-    if (localFound.length === tokens.length) {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        try {
-          window.localStorage.setItem(cacheKey, JSON.stringify(localFound));
-        } catch (e) {
-          console.warn("Failed to write to localStorage:", e);
-        }
-      }
-      return localFound;
-    }
-  }
-
-  // 【第 3 階防線】：若上述皆無，才呼叫 Gemini API 進行解析（配置 8 秒 Timeout 限制與離線防卡死降級）
   try {
     const apiCallPromise = ai.models.generateContent({
-      model: "gemini-3.8-flash",
+      model: "gemini-4-hydrogen",
       contents: `
         You are an expert Japanese linguist and dictionary lexicographer.
         Analyze the following Japanese word(s) or input:
         "${queryStr}"
 
         MANDATORY REQUIREMENTS:
-        1. Provide accurate Hiragana reading (標音).
-        2. Provide standard Hepburn Romaji pronunciation (羅馬拼音).
-        3. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
-        4. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
-        5. Provide clear, concise Traditional Chinese definition (繁體中文).
-        6. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations.
-        7. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
+        1. Provide the exact Japanese word (Kanji or Kana).
+        2. Provide accurate Hiragana reading (假名標音).
+        3. Provide standard Hepburn Romaji pronunciation (羅馬拼音，例如：watashi, taberu).
+        4. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
+        5. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
+        6. Provide clear, concise Traditional Chinese definition (繁體中文釋義).
+        7. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations, plus fill exampleSentence / exampleReading / exampleTranslation from the first example.
+        8. Provide sentenceBreakdown for key vocabulary in the first example sentence.
+        9. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
         
         Response Language: Traditional Chinese (繁體中文).
       `,
       config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
     });
 
-    // 8 秒逾時防卡死機制
+    // 15 秒請求逾時保護（逾時即直接拋出錯誤，不回傳假資料）
     let timeoutTimer: any;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutTimer = setTimeout(() => {
-        reject(new Error("GEMINI_TIMEOUT_8S"));
-      }, 8000);
+        reject(new Error("GEMINI_TIMEOUT"));
+      }, 15000);
     });
 
     const response = await Promise.race([apiCallPromise, timeoutPromise]);
     clearTimeout(timeoutTimer);
 
-    const data = JSON.parse(response.text) as WordDefinition[];
+    const rawText = response.text?.trim();
+    if (!rawText) {
+      throw new Error("Gemini API 回傳內容為空，請稍後再試。");
+    }
+
+    const data = JSON.parse(rawText) as WordDefinition[];
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error(`找不到「${queryStr}」的相關日文解析結果，請確認輸入內容後再試。`);
+    }
+
     const formattedData = data.map((d, i) => {
       let exList = d.examples && d.examples.length > 0 ? d.examples : [];
       if (exList.length === 0 && d.exampleSentence) {
@@ -1101,7 +1031,7 @@ export const fetchWordDefinitions = async (query: string): Promise<WordDefinitio
       };
     });
 
-    // 解析成功後自動存入 localStorage 快取
+    // 3. 查完拿到結果後，自動存入 localStorage 快取，方便下次秒開
     if (typeof window !== 'undefined' && window.localStorage && formattedData.length > 0) {
       try {
         window.localStorage.setItem(cacheKey, JSON.stringify(formattedData));
@@ -1112,46 +1042,40 @@ export const fetchWordDefinitions = async (query: string): Promise<WordDefinitio
 
     return formattedData;
   } catch (err: any) {
-    const isTimeout = err?.message === "GEMINI_TIMEOUT_8S";
-    const status = err?.status || err?.code || "";
-    console.warn(
-      `[日本語ごご！] Gemini API 解析${isTimeout ? "逾時 (已超過 8 秒限制)" : `異常 (狀態碼: ${status || "未知"})`}，已自動啟用離線防卡死機制，傳回預設簡易解析卡片。詳細原因:`,
-      err
-    );
+    console.error("[日本語ごご！] Gemini API 單字查詢失敗:", err);
 
-    // 自動切換至離線 Mode，傳回預設的簡易解析卡片，防止頁面卡死在解析狀態
-    const fallbackList: WordDefinition[] = (tokens.length > 0 ? tokens : [queryStr]).map((tok, i) => ({
-      id: `w-fallback-${Date.now()}-${i}`,
-      word: tok,
-      reading: tok,
-      romaji: toHepburnRomaji(tok),
-      meaning: "（離線模式）連線逾時或暫時無法存取線上服務，提供基礎單字卡以供學習。",
-      pitchAccent: "平板型 [0]",
-      partOfSpeech: "詞彙",
-      exampleSentence: `${tok}を使った日本語の練習をしましょう。`,
-      exampleReading: `${tok}をつかったにほんごのれんしゅうをしましょう。`,
-      exampleTranslation: `讓我們使用「${tok}」來練習日語吧。`,
-      examples: [
-        {
-          sentence: `${tok}を使った日本語の練習をしましょう。`,
-          reading: `${tok}をつかったにほんごのれんしゅうをしましょう。`,
-          translation: `讓我們使用「${tok}」來練習日語吧。`
-        }
-      ]
-    }));
+    if (err?.message === "GEMINI_TIMEOUT") {
+      throw new Error("解析請求逾時（超過 15 秒未回應），請檢查網路連線後重試。");
+    }
 
-    return fallbackList;
+    const rawMsg = String(err?.message || err || "");
+    const status = err?.status || err?.code;
+
+    if (status === 400 || status === 403 || rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("PERMISSION_DENIED")) {
+      throw new Error("Gemini API 金鑰無效或權限不足，請確認 VITE_GEMINI_API_KEY 設定。");
+    }
+    if (status === 429 || rawMsg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("Gemini API 請求次數已達上限（429），請稍後再試。");
+    }
+    if (status === 404 || rawMsg.includes("NOT_FOUND")) {
+      throw new Error("指定的 Gemini 模型無法存取（404），請確認模型名稱設定。");
+    }
+    if (status === 500 || status === 503 || rawMsg.includes("UNAVAILABLE")) {
+      throw new Error("Gemini 伺服器暫時忙碌或無法連線（503），請稍後再試。");
+    }
+
+    throw new Error(rawMsg ? `單字解析失敗：${rawMsg}` : "單字解析失敗，請確認網路連線或稍後再試。");
   }
 };
 
 /**
- * lookupJapanese: 字典單字解析核心函式（支援增強多維度比對、Romaji 自動轉換、三階防線快取、8 秒逾時防卡死與離線自動降級）
+ * lookupJapanese: 字典單字解析核心函式（localStorage 快取優先，未命中則直接呼叫 Gemini API 並快取結果）
  */
 export const lookupJapanese = fetchWordDefinitions;
 
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `
       You are an expert Japanese grammar specialist.
       Analyze the following Japanese grammar pattern:
@@ -1188,7 +1112,7 @@ export const fetchSentenceVocabulary = async (sentence: string): Promise<Sentenc
     }
   };
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Extract 2 to 5 key vocabulary words from this Japanese sentence: "${sentence}". Provide dictionary form or base word, Hiragana reading, and Traditional Chinese meaning. STRICT ANTI-EMOJI RULE: Never output emojis.`,
     config: { responseMimeType: "application/json", responseSchema: schema },
   });
@@ -1198,7 +1122,7 @@ export const fetchSentenceVocabulary = async (sentence: string): Promise<Sentenc
 export const fetchRecommendedWords = async (level: string, count: number, exclude: string[] = [], category?: string): Promise<WordDefinition[]> => {
   const categoryPhrase = category ? ` belonging strictly to the category "${category}" (for example: daily terms, food/dining, transportation, travel, shopping)` : "";
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Recommend ${count} JLPT ${level} words${categoryPhrase}. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
   });
@@ -1207,7 +1131,7 @@ export const fetchRecommendedWords = async (level: string, count: number, exclud
 
 export const fetchRecommendedGrammar = async (level: string, count: number, exclude: string[]): Promise<GrammarDefinition[]> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Recommend ${count} JLPT ${level} grammar. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
     config: { responseMimeType: "application/json", responseSchema: grammarSchema },
   });
@@ -1217,7 +1141,7 @@ export const fetchRecommendedGrammar = async (level: string, count: number, excl
 
 export const analyzeReadingText = async (input: string): Promise<ReadingMaterial> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `
       You are an expert Japanese linguist.
       Analyze the following Japanese text very carefully:
@@ -1238,7 +1162,7 @@ export const analyzeReadingText = async (input: string): Promise<ReadingMaterial
 
 export const generateRecommendedReading = async (level: string): Promise<ReadingMaterial> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Write an engaging, highly random, and original short article/story in Japanese suitable for JLPT ${level} learners. The topic should be completely random (for example: Japanese food culture, a seasonal festival, travel adventures, dynamic daily interactions, or a whimsical tale). Return the response strictly matching the schema with full token breakdowns and traditional Chinese (Taiwan) translations.`,
     config: { responseMimeType: "application/json", responseSchema: readingSchema },
   });
@@ -1263,7 +1187,7 @@ export const generateQuizFromContent = async (
     isArticleQuiz
   });
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `
       Based on the following content context: ${context}
       
@@ -1433,7 +1357,7 @@ export const generateTargetedQuiz = async (
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: prompt,
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
@@ -1529,7 +1453,7 @@ export const generateDailyStudyQuiz = async (
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: prompt,
     config: { responseMimeType: "application/json", responseSchema: quizSchema },
   });
@@ -1614,7 +1538,7 @@ const listeningSchema = {
 
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS: The dialogue transcript must NOT contain any XML/HTML/SSML tags (strictly NO <prosody>, NO </prosody>). Use only pure speaker lines like "女：..." and "男：...". Break it into natural sentences/segments. Traditional Chinese translation.`,
     config: { responseMimeType: "application/json", responseSchema: listeningSchema },
   });
@@ -1623,7 +1547,7 @@ export const fetchListeningMaterial = async (level: string): Promise<any> => {
 
 export const checkListeningAnswer = async (correctText: string, userInput: string): Promise<any> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `Compare Japanese texts. Correct: "${correctText}". User input: "${userInput}". Calculate similarity (0-100) and provide encouraging feedback in Traditional Chinese.`,
     config: {
       responseMimeType: "application/json",
@@ -1687,7 +1611,7 @@ const diaryAnalysisSchema = {
 
 export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalysisResult> => {
   const response = await ai.models.generateContent({
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
     contents: `
       You are an expert Japanese language tutor who corrects student diaries, specializing in teaching beginners and intermediate learners (specifically JLPT N4/N5 level).
       Please analyze and correct this Japanese diary entry written by a student:
