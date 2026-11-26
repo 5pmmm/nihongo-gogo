@@ -15,11 +15,14 @@ export interface WordDefinition {
   id?: string;
   word: string;
   reading: string;
+  furigana?: string;
   romaji?: string;
+  pitch?: string;
   pitchAccent?: string; // 重音 (e.g. 平板型 [0], 頭高型 [1])
   meaning: string;
+  meanings?: string[];
   partOfSpeech?: string;
-  examples?: WordExample[]; // 2~3 example sentences
+  examples?: WordExample[]; // 1~2 example sentences
   exampleSentence: string;
   exampleReading?: string;
   exampleTranslation: string;

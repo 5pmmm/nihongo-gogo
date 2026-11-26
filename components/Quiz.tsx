@@ -28,7 +28,7 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
   const [dailyItems, setDailyItems] = useState<DailySearchItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [customInput, setCustomInput] = useState<string>('');
-  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [questionCount, setQuestionCount] = useState<number>(15);
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -105,23 +105,6 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
       .replace(/^[A-Da-d1-4][\.\、\s\)\:\-]\s*/, '')
       .replace(/[。\.\s]+$/, '')
       .trim();
-  };
-
-  // 閱讀題兜底短文生成器：若模型未返回文章或當日無文章紀錄，智能產生符合情境之 3~5 句日文短文
-  const synthesizeReadingPassageFallback = (q: QuizQuestion): string => {
-    const correctOpt = q.options && q.options[q.correctAnswerIndex] ? cleanOptionText(q.options[q.correctAnswerIndex]) : '';
-    const questionText = q.question || '';
-
-    if (questionText.includes('本') || questionText.includes('購入') || questionText.includes('買')) {
-      return `先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。`;
-    }
-    if (questionText.includes('アパート') || questionText.includes('部屋') || questionText.includes('家賃')) {
-      return `最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は緑が多くて静かな住宅街で、日当たりも良く快適に暮らしています。`;
-    }
-    if (questionText.includes('メール') || questionText.includes('連絡') || questionText.includes('会議')) {
-      return `社内関係者の皆様へ：明日の午前10時より第2会議室にて定例ミーティングを行います。本日の打ち合わせで検討した資料の修正版を添付いたしましたので、各自ご確認の上ご参加くださいますようお願いいたします。`;
-    }
-    return `先日の出来事について述べます。ある日の午後、新しい体験をするために近くの施設を訪れました。そこで得られた最も印象的な結果は「${correctOpt || '予想以上の充実した成果'}」でした。周囲の人々もその点に共感しており、今後もこのような機会を大切にしていきたいと感じています。`;
   };
 
   // Generate Quiz
@@ -205,7 +188,7 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
         throw new Error('未取得有效題目');
       }
 
-      // 核心防護：修復文章題無文章之錯誤，若題幹缺失 context，自動以文章或智能情境短文救援
+      // 確保閱讀題具備獨立文章本文（僅在自訂文章無 context 時補齊，不使用罐頭假短文）
       const patched = generated.map(q => {
         const isReading =
           q.type === 'reading' ||
@@ -216,9 +199,9 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
         if (isReading) {
           let ctx = q.context?.trim() || '';
           if (!ctx || ctx.length < 20) {
-            ctx = passages['default'] || passages['custom'] || synthesizeReadingPassageFallback(q);
+            ctx = passages['default'] || passages['custom'] || ctx;
           }
-          return { ...q, type: 'reading', subType: 'reading', context: ctx };
+          return { ...q, type: 'reading' as const, subType: 'reading' as const, context: ctx };
         }
         return q;
       });
@@ -230,7 +213,7 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
       setIsStarted(true);
     } catch (err: any) {
       console.error('Quiz generation failed:', err);
-      setErrorMessage('測驗題目生成失敗，請確認網路連線或稍後再試。');
+      setErrorMessage(err?.message || '測驗題目生成失敗，請確認網路連線或稍後再試。');
     } finally {
       setLoading(false);
     }
@@ -438,16 +421,16 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
             )}
           </div>
           <p className="text-sm text-[#6C757D] leading-relaxed">
-            系統已自動讀取您今日查詢的單字、文法與文章。勾選欲測驗的項目，Gemini 將即時為您量身打造專屬測驗（含單字拆解題、拼音題、星號重組題與閱讀理解題）。
+            系統已自動讀取您今日查詢的單字、文法與文章。勾選欲測驗的項目（推薦 15 題模擬考），AI 將即時生成五大題型：漢字讀音、單字選填、文法助詞、星號重組與獨立短文閱讀理解。
           </p>
         </div>
 
         {/* Loading Overlay */}
         {loading && (
           <div className="bg-white border border-[#E9ECEF] rounded-2xl p-10 text-center space-y-4 shadow-xs">
-            <Loader message="AI 正在根據您選擇的學習項目生成針對性測驗..." />
+            <Loader message="正在並行生成五大題型專屬模擬測驗..." />
             <p className="text-xs text-[#6C757D]">
-              嚴格約束重組題唯一正解，正在建構題意接續...
+              已拆分為小批次高速請求，確保於時限內完成出題與詳解
             </p>
           </div>
         )}
@@ -974,12 +957,9 @@ export const Quiz: React.FC<QuizProps> = ({ onExit }) => {
     Boolean(currentQ?.instruction && currentQ.instruction.includes('文章を読んで')) ||
     Boolean(currentQ?.question && (currentQ.question.includes('筆者') || currentQ.question.includes('文章') || currentQ.question.includes('本文')));
 
-  // 取得閱讀文章本文（若題幹 context 為空，則自動以當日學習文章或智能情境短文救援，100% 保證有文章可讀）
-  let readingPassage =
+  // 取得閱讀文章本文
+  const readingPassage =
     currentQ?.context?.trim() || articlePassagesRef.current['default'] || articlePassagesRef.current['custom'] || '';
-  if (isReadingQuestion && (!readingPassage || readingPassage.length < 20)) {
-    readingPassage = synthesizeReadingPassageFallback(currentQ);
-  }
 
   // 渲染標準題目作答卡片本體
   const renderQuestionCardBody = () => (

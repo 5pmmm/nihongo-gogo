@@ -1,898 +1,188 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { WordDefinition, QuizQuestion, GrammarDefinition, ReadingMaterial, ChatMessage, DiaryAnalysisResult, SentenceWord } from "../types";
+import {
+  WordDefinition,
+  QuizQuestion,
+  GrammarDefinition,
+  ReadingMaterial,
+  DiaryAnalysisResult,
+  SentenceWord,
+} from "../types";
 
-// Mock Response Generator for Offline Support or Headless Environments without Keys
-const mockGenerateContent = async (args: any) => {
-  const contents = args?.contents || "";
-  let contentStr = "";
-  if (typeof contents === 'string') {
-    contentStr = contents;
-  } else if (contents && typeof contents === 'object') {
-    contentStr = JSON.stringify(contents);
-  }
-
-  let mockData: any = {};
-
-  if (contentStr.includes("diary entry") || contentStr.includes("student diaries") || contentStr.includes("DIARY")) {
-    mockData = {
-      title: "私の体験 (我的體驗)",
-      correctedFullText: "今日は友達と一緒に美味しいお寿司を食べました。とても楽しかったです！",
-      overallFeedback: "（離線模式）日記結構清晰，大致表達流暢。只微調了名詞美化語使得表達更為擬真。做得很好，請繼續保持寫作！",
-      jlptEstimatedLevel: "N5",
-      corrections: [],
-      vocabGrammarList: [
-        {
-          expression: "お寿司",
-          reading: "おすし",
-          meaning: "壽司 (多用美化語お開頭)",
-          type: "VOCAB"
-        }
-      ]
-    };
-  } else if (contentStr.includes("TARGET FOCUS FOR THIS QUIZ") || contentStr.includes("100% REVOLVE AROUND") || contentStr.includes("targeted Japanese quiz")) {
-    const match = contentStr.match(/The student has entered the specific Japanese word or grammar pattern:\s*"([^"]+)"/) ||
-                  contentStr.match(/revolve around:\s*"([^"]+)"/i) ||
-                  contentStr.match(/target Japanese word or grammar pattern:\s*"([^"]+)"/i);
-    const target = match ? match[1] : "はずです";
-
-    mockData = [
-      {
-        id: "mock_target_q1",
-        context: "",
-        question: `真面目な彼のことだから、約束の時間を___${target.includes('はず') ? 'はずです' : target}。`,
-        questionReading: `まじめなかれのことだから、やくそくのじかんをまもる${target}。`,
-        questionTranslation: `以他認真的個性，應該會遵守約定的時間。`,
-        options: ["守る", "守った", "守って", "守り"],
-        correctAnswerIndex: 0,
-        explanation: `針對「${target}」之接續測試：前面接動詞辭書形（連體形）「守る」，表示根據客觀依據或常理推測「應該會守約」。`,
-        type: "grammar"
-      },
-      {
-        id: "mock_target_q2",
-        context: "",
-        question: `田中さんは今日病気で休んでいるので、この会議に___。`,
-        questionReading: `たなかさんはきょうびょうきでやすんでいるので、このかいぎにくるはずがありません。`,
-        questionTranslation: `田中先生今天生病請假，所以這場會議不可能會來。`,
-        options: [
-          `来る${target.includes('はず') ? 'はずがありません' : target + 'ではありません'}`,
-          `来る${target.includes('はず') ? 'はずでした' : target}`,
-          `来た${target.includes('はず') ? 'はずです' : target}`,
-          `来ない${target.includes('はず') ? 'はずでした' : target}`
-        ],
-        correctAnswerIndex: 0,
-        explanation: `針對「${target}」之否定與情境邏輯測試：前文明確給出「生病請假」之前提，因此具有強烈確信的客觀否定推論，答案為第 1 項。`,
-        type: "grammar"
-      },
-      {
-        id: "mock_target_q3",
-        context: "",
-        sentence: "（天気予報によると、明日は晴れるそうなので、）運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。",
-        scrambleItems: ["予定通り", "行われる", "はず", "なの"],
-        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        question: "（天気予報によると、明日は晴れるそうなので、）運動会は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ です。",
-        questionReading: "てんきよほうによると、あしたははれるそうなので、うんどうかいはよていどおりおこなわれるはずなのです。",
-        questionTranslation: "（根據氣象預報，明天好像是大晴天，）運動會應該會按原定計畫舉行。",
-        options: ["予定通り", "行われる", "はず", "なの"],
-        correctAnswerIndex: 2,
-        explanation: "【正確順序】1（予定通り） → 2（行われる） → 3（はず） → 4（なの）。第 3 個空格（★ 處）為「3. はず」。【唯一解文法】「副詞（予定通り）＋受身動詞連體形（行われる）＋形式名詞（はず）＋準體助詞（なの）＋です」。順序唯一鎖定，語法嚴密無二義性。",
-        type: "ordering"
-      }
-    ];
-  } else if (contentStr.includes("DAILY STUDY QUIZ")) {
-    mockData = [
-      {
-        id: "mock_daily_q1",
-        context: "",
-        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        sentence: "（駅の改札が混雑しているので、）私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
-        scrambleItems: ["人が", "少なく", "なって", "から"],
-        question: "（駅の改札が混雑しているので、）私は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 通過した。",
-        questionReading: "えきのかいさつがこんざつしているので、わたしはひとがすくなくなってからつうかした。",
-        questionTranslation: "（因為車站剪票口很擁擠，）我等搭車人變少之後才通過。",
-        options: ["人が", "少なく", "なって", "から"],
-        correctAnswerIndex: 2,
-        explanation: "【正確順序】1（人が） → 2（少なく） → 3（なって） → 4（から）。第 3 位（★ 處）為「3. なって」。前有原因前提，接續唯一鎖定，無二義性。",
-        type: "ordering"
-      },
-      {
-        id: "mock_daily_q2",
-        context: "先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。",
-        instruction: "文章を読んで、次の問いに最も適した答えを選びなさい。",
-        question: "筆者が本を購入した一番の理由は何ですか。",
-        questionReading: "ひっしゃがほんをこうにゅうしたいちばんのりゆうはなんですか。",
-        questionTranslation: "作者買這本書的最主要原因是什麼？",
-        options: [
-          "内容を事前にしっかり確認したから",
-          "表紙のイラストに強く惹かれたから",
-          "夜遅くに衝動買いをしたから",
-          "合格するためにどうしても必要だったから"
-        ],
-        correctAnswerIndex: 1,
-        explanation: "文章第二句明確提到「棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた」，因此買書的主要原因為被封面插圖深深吸引，正確答案為第 2 項。",
-        type: "reading"
-      },
-      {
-        id: "mock_daily_q3",
-        context: "",
-        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        sentence: "（明日は大切な面接があるので、）今夜は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 休もうと思う。",
-        scrambleItems: ["夜遅くまで", "起きずに", "早く", "ベッドに入って"],
-        question: "（明日は大切な面接があるので、）今夜は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 休もうと思う。",
-        questionReading: "あしたはたいせつなめんせつがあるので、こんやはよるおそくまでおきずに、はやくベッドにはいってやすもうとおもう。",
-        questionTranslation: "（因為明天有重要的面試，）我打算今晚不要熬夜到很晚，早點上床休息。",
-        options: ["夜遅くまで", "起きずに", "早く", "ベッドに入って"],
-        correctAnswerIndex: 3,
-        explanation: "【正確順序】1（夜遅くまで） → 2（起きずに） → 4（ベッドに入って） → 3（早く）或 1 → 2 → 3（早く） → 4（ベッドに入って）。★ 第 3 位為「4. ベッドに入って」或「3. 早く」。副詞修飾動詞連用形，接續嚴格成立。",
-        type: "ordering"
-      },
-      {
-        id: "mock_daily_q4",
-        context: "最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は静かな住宅街で、日当たりも良く快適に暮らしています。",
-        instruction: "文章を読んで、次の問いに最も適した答えを選びなさい。",
-        question: "筆者が新しいアパートを気に入っている理由として、文章で述べられていないものはどれですか。",
-        questionReading: "ひっしゃがあたらしいあぱーとをきにいっているりゆうとして、ぶんしょうでのべられていないものはどれですか。",
-        questionTranslation: "關於作者喜歡新公寓的理由，文章中未提及的是哪一項？",
-        options: [
-          "部屋が広いこと",
-          "駅から近いこと",
-          "家賃が安いこと",
-          "周囲が静かな住宅街であること"
-        ],
-        correctAnswerIndex: 0,
-        explanation: "文章中提到了「駅から近い」、「家賃も安くなった」、「周囲は静かな住宅街」以及「日当たりも良い」，但並未提及「部屋が広い（房間寬敞）」，因此第 1 項為文章中未提及的選項。",
-        type: "reading"
-      },
-      {
-        id: "mock_daily_q5",
-        context: "",
-        instruction: "下線の言葉の用法や意味として最も適当なものを選びなさい。",
-        question: "試験の合格ラインは70点だったが、70点で【ギリギリ】合格できた。",
-        sentence: "試験の合格ラインは70点だったが、70点で【ギリギリ】合格できた。",
-        questionReading: "しけんのごうかくラインはななじゅってんだったが、ななじゅってんでギリギリごうかくできた。",
-        questionTranslation: "考試及格標準是70分，我考了70分勉強及格。",
-        options: ["余裕を持って十分に", "限界ぎりぎりで辛うじて", "完全に不合格で", "計画通りに順調に"],
-        correctAnswerIndex: 1,
-        explanation: "「ギリギリ」表示在極限、勉強趕上或勉強過關的狀態（在及格邊緣勉強及格）。",
-        type: "vocab"
-      }
-    ];
-  } else if (contentStr.includes("mixed Japanese quiz") || contentStr.includes("10-question") || contentStr.includes("engaging Japanese quiz") || contentStr.includes("quiz")) {
-    mockData = [
-      {
-        id: "mock_q1",
-        context: "",
-        question: "私は毎日日本語___勉強します。",
-        questionReading: "わたしはまいにちにほんご___べんきょうします。",
-        questionTranslation: "我每天學習日文。",
-        options: ["を", "が", "に", "で"],
-        correctAnswerIndex: 0,
-        explanation: "「勉強する」是及物動詞，目標賓語使用助詞「を」來提示。",
-        type: "grammar"
-      },
-      {
-        id: "mock_q2",
-        context: "",
-        question: "昨日は天気が___かったです。",
-        questionReading: "きのうはてんきが___かったです。",
-        questionTranslation: "昨天天氣很好。",
-        options: ["よ", "いい", "わる", "たか"],
-        correctAnswerIndex: 0,
-        explanation: "「いい（好）」的過去式變化是「よかった（かったです）」，去い加かった。",
-        type: "vocab"
-      },
-      {
-        id: "mock_q3",
-        context: "",
-        sentence: "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。",
-        scrambleItems: ["人が", "少なく", "なって", "から"],
-        instruction: "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        question: "（駅の改札が混雑中なので、）\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。\n【1. 人が　2. 少なく　3. なって　4. から】\n★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。",
-        questionReading: "えきのかいさつがこんざつちゅうなので、ひとがすくなくなってからいきましょう。",
-        questionTranslation: "（因為車站剪票口現在很擠，）等人都變少之後我們再走吧。",
-        options: ["人が", "少なく", "なって", "から"],
-        correctAnswerIndex: 2,
-        explanation: "【正確完整句子】「駅の改札が混雑中なので、人が少なく（2）なって（3）から（4）行きましょう。」\n【正確順序】1 → 2 → 3 → 4\n【★ 處位置】第 3 個空格（★）填入的是「3. なって」。\n【接續解析】動詞「なる」接在形容詞「少ない」之後轉為連用形「少なく＋なる」，再以「て形」接「から」表示「～之後才做某動作」。其他排列在日文接續語法上完全無法成立。",
-        type: "ordering"
-      }
-    ];
-  } else if (contentStr.includes("Japanese tutor") || contentStr.includes("User says")) {
-    mockData = {
-      reply: "こんにちは！お元気ですか？日本語の勉強を一緒に頑張りましょう！何か質問があれば何でも聞いてくださいね。",
-      translation: "你好！你好嗎？讓我們一起加油學習日文吧！如果有任何問題隨時都可以問我喔。",
-      translationEn: "Hello! How are you? Let's work hard together to study Japanese! If you have any questions, feel free to ask.",
-      correction: null
-    };
-  } else if (contentStr.includes("tourist helper") || contentStr.includes("MENU") || contentStr.includes("LABEL")) {
-    mockData = {
-      title: "美味拉麵菜單 (Delicious Ramen Menu)",
-      originalLanguage: "日語 (Japanese)",
-      translatedTextZh: "這是一份道地的拉麵菜單，包含豚骨拉麵與人氣配餐。",
-      translatedTextEn: "This is a local Japanese ramen menu featuring flavor-packed Tonkotsu pork-bone ramen.",
-      pronunciation: "Oishii Ramen Menyuu",
-      detectedItems: [
-        {
-          original: "豚骨ラーメン",
-          kana: "とんこつらーめん",
-          romaji: "Tonkotsu Ramen",
-          translationZh: "豚骨拉麵",
-          translationEn: "Pork-bone Broth Ramen"
-        }
-      ],
-      travelTips: "點餐時可以手指著並說『これをお願いします (Kore wo onegai shimasu)』，代表『請給我這個』。"
-    };
-  } else if (contentStr.includes("listening practice") || contentStr.includes("listeningSchema") || contentStr.includes("listening")) {
-    mockData = {
-      title: "今日の天気予報 (今日天氣預報)",
-      fullContent: "皆さん、こんにちは。今日の東京は朝からとても良い天気です。",
-      translation: "各位好，今天的東京從早上開始就是大晴天。",
-      segments: [
-        {
-          text: "今日の東京は朝からとても良い天気です。",
-          reading: "きょうのとうきょうはあさからとてもよいてんきです。",
-          translation: "今天的東京從早上開始就是大晴天。",
-          tokens: [
-            {
-              text: "天氣",
-              dictionaryForm: "天気",
-              reading: "てんき",
-              meaning: "天氣",
-              type: "VOCAB",
-              jlpt: "N5",
-              partOfSpeech: "名詞"
-            }
-          ]
-        }
-      ]
-    };
-  } else if (contentStr.includes("Compare Japanese texts")) {
-    mockData = {
-      correct: true,
-      similarity: 95,
-      feedback: "（離線模式）您的拼寫與發音極其精準！做得非常棒，請繼續保持！"
-    };
-  } else if (contentStr.includes("AI Smart Assistant") || contentStr.includes("ROUTE") || contentStr.includes("RECIPE")) {
-    mockData = {
-      textAnswer: "（離線模擬模式）很高興為您解答！\n\n1.  **日本電車搭乘提示**：日本搭乘地鐵時請保持安靜，避免大聲傾談。\n2.  **實用短句**：『すみません (Sumimasen)』可以用作不好意思、對不起，或者搭話。 \n\n若想要完整的聯網高階搜尋與地圖答覆，請於設定中配置您的 VITE_GEMINI_API_KEY 喔！",
-      detectedType: "GENERAL_KNOWLEDGE",
-      sources: [
-        { "title": "日本旅遊局首頁", "url": "https://www.japan.travel/" }
-      ]
-    };
-  } else if (contentStr.includes("extract vocabulary") || contentStr.includes("vocabulary definitions")) {
-    mockData = [
-      {
-        word: "日本語",
-        reading: "にほんご",
-        meaning: "日語、日語語言",
-        exampleSentence: "日本語の勉強はとても面白いです。",
-        exampleReading: "にほんごのべんきょうはとてもおもしろいです。",
-        exampleTranslation: "學日文非常有趣。",
-        sentenceBreakdown: [
-          { "word": "勉強", "reading": "べんきょう", "meaning": "學習" },
-          { "word": "面白い", "reading": "おもしろい", "meaning": "有趣的" }
-        ]
-      }
-    ];
-  } else if (contentStr.includes("extract grammar")) {
-    mockData = [
-      {
-        grammarPoint: "～てください",
-        connection: "動詞 て形 + ください",
-        meaning: "請做某事",
-        explanation: "用於委婉或禮貌地請求、要求對方進行某項動作。",
-        examples: [
-          {
-            sentence: "本を読んでください。",
-            reading: "ほんをよんでください。",
-            translation: "請讀書。"
-          }
-        ]
-      }
-    ];
-  } else if (contentStr.includes("everyday beginner vocabulary") || contentStr.includes("fetchRecommendedWords") || (contentStr.includes("Recommend") && contentStr.includes("words"))) {
-    if (contentStr.includes("食物") || contentStr.includes("food") || contentStr.includes("dining")) {
-      mockData = [
-        {
-          word: "寿司",
-          reading: "すし",
-          meaning: "壽司",
-          exampleSentence: "日本の寿司はとても有名で美味しいです。",
-          exampleReading: "にほんのすしはとてもゆうめいでおいしいです。",
-          exampleTranslation: "日本的壽司非常有名且美味。",
-          sentenceBreakdown: [
-            { "word": "有名", "reading": "ゆうめい", "meaning": "有名" },
-            { "word": "美味しい", "reading": "おいしい", "meaning": "美味" }
-          ]
-        },
-        {
-          word: "ラーメン",
-          reading: "らーめん",
-          meaning: "拉麵",
-          exampleSentence: "寒い日に熱いラーメンを食べるのが好きです。",
-          exampleReading: "さむいひにあついらーめんをたべるのがすきです。",
-          exampleTranslation: "我喜歡在寒冷的日子吃熱騰騰的拉麵。",
-          sentenceBreakdown: [
-            { "word": "寒い", "reading": "さむい", "meaning": "寒冷" },
-            { "word": "熱い", "reading": "あつい", "meaning": "熱" }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("交通") || contentStr.includes("transportation") || contentStr.includes("transit")) {
-      mockData = [
-        {
-          word: "新幹線",
-          reading: "しんかんせん",
-          meaning: "新幹線",
-          exampleSentence: "東京から大阪まで新幹線で行きました。",
-          exampleReading: "とうきょうからおおさかまでしんかんせんでいきました。",
-          exampleTranslation: "我搭乘新幹線從東京前往大阪。",
-          sentenceBreakdown: [
-            { "word": "行く", "reading": "いく", "meaning": "去" }
-          ]
-        },
-        {
-          word: "電車",
-          reading: "でんしゃ",
-          meaning: "電車、火車",
-          exampleSentence: "毎日電車に乗って学校へ通っています。",
-          exampleReading: "まいにちでんしゃにのってがっこうへかよっています。",
-          exampleTranslation: "我每天搭電車去學校上學。",
-          sentenceBreakdown: [
-            { "word": "学校", "reading": "がっこう", "meaning": "學校" }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("旅遊") || contentStr.includes("travel")) {
-      mockData = [
-        {
-          word: "旅行",
-          reading: "りょこう",
-          meaning: "旅遊、旅行",
-          exampleSentence: "来週、日本へ旅行に行きます。",
-          exampleReading: "らいしゅう、にほんへりょこうにいきます。",
-          exampleTranslation: "下週我要去日本旅行。",
-          sentenceBreakdown: [
-            { "word": "来週", "reading": "らいしゅう", "meaning": "下週" }
-          ]
-        },
-        {
-          word: "ホテル",
-          reading: "ほてる",
-          meaning: "飯店、旅館",
-          exampleSentence: "駅の近くの綺麗なホテルを予約しました。",
-          exampleReading: "えきのちかくのきれいなほてるをよやくしました。",
-          exampleTranslation: "我預訂了車站附近乾淨漂亮的飯店。",
-          sentenceBreakdown: [
-            { "word": "綺麗", "reading": "きれい", "meaning": "漂亮" }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("購物") || contentStr.includes("shopping")) {
-      mockData = [
-        {
-          word: "買い物",
-          reading: "かいもの",
-          meaning: "購物、買東西",
-          exampleSentence: "週末にデパートで買い物をします。",
-          exampleReading: "しゅうまつにでぱーとでかいものをします。",
-          exampleTranslation: "週末要在百貨公司買東西。",
-          sentenceBreakdown: [
-            { "word": "週末", "reading": "しゅうまつ", "meaning": "週末" }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("動漫") || contentStr.includes("anime")) {
-      mockData = [
-        {
-          word: "アニメ",
-          reading: "あにめ",
-          meaning: "動漫、卡通",
-          exampleSentence: "この日本のアニメは世界中で大人気です。",
-          exampleReading: "このにほんのあにめはせかいじゅうでだいにんきです。",
-          exampleTranslation: "這部日本動漫在全世界非常受歡迎。",
-          sentenceBreakdown: [
-            { "word": "大人気", "reading": "だいにんき", "meaning": "極具人氣" }
-          ]
-        }
-      ];
-    } else {
-      mockData = [
-        {
-          word: "友達",
-          reading: "ともだち",
-          meaning: "朋友",
-          exampleSentence: "今日は友達と一緒にカフェへ行きました。",
-          exampleReading: "きょうはともだちといっしょにかふぇへいきました。",
-          exampleTranslation: "今天跟朋友一起去了咖啡廳。",
-          sentenceBreakdown: [
-            { "word": "今日", "reading": "きょう", "meaning": "今天" }
-          ]
-        },
-        {
-          word: "勉強",
-          reading: "べんきょう",
-          meaning: "學習、用功",
-          exampleSentence: "日本語の勉強は少し難しいですが、面白いです。",
-          exampleReading: "にほんごのべんきょうはすこしむずかしいですが、おもしろいです。",
-          exampleTranslation: "學習日文雖然有點難，但很有趣。",
-          sentenceBreakdown: [
-            { "word": "面白い", "reading": "おもしろい", "meaning": "有趣的" }
-          ]
-        }
-      ];
-    }
-  } else if (contentStr.includes("beginner grammar patterns") || contentStr.includes("fetchRecommendedGrammar") || (contentStr.includes("Recommend") && contentStr.includes("grammar"))) {
-    if (contentStr.includes("N1")) {
-      mockData = [
-        {
-          grammarPoint: "～極まりない",
-          connection: "形動（去だ）／名 + 極まりない",
-          meaning: "極其...、無比... (用於譴責、批判、輕視等負面事態)",
-          explanation: "書面語，表示某一狀態達到了極限，語氣極為強烈。",
-          examples: [
-            {
-              sentence: "彼の態度は不愉快極まりない。",
-              reading: "かれのたいどはふゆかいきわまりない。",
-              translation: "他的態度令人極其不愉快。"
-            }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("N2")) {
-      mockData = [
-        {
-          grammarPoint: "～つつある",
-          connection: "動詞 ます形（去ます） + つつある",
-          meaning: "正在...、漸漸在... (表示事物正朝某個方向持續變化)",
-          explanation: "常用於書面或比較正式的場合，表示變化正在進展中。",
-          examples: [
-            {
-              sentence: "日本の人口は減少しつつある。",
-              reading: "にほんのじんこうはげんしょうしつつある。",
-              translation: "日本的人口正在逐漸減少。"
-            }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("N3")) {
-      mockData = [
-        {
-          grammarPoint: "～たびに",
-          connection: "動詞 普通形 / 名詞 + の + たびに",
-          meaning: "每次...就...、每當...",
-          explanation: "表示「每當進行某動作，後面的情況就一定隨之發生」之意。",
-          examples: [
-            {
-              sentence: "この曲を聞くたびに、故郷を思い出します。",
-              reading: "このきょくをきくたびに、こきょうをおもいだします。",
-              translation: "每當聽到這首歌，我就會想起故鄉。"
-            }
-          ]
-        }
-      ];
-    } else if (contentStr.includes("N4")) {
-      mockData = [
-        {
-          grammarPoint: "～ながら",
-          connection: "動詞 ます形（去ます） + ながら",
-          meaning: "一邊...一邊... (同時進行兩個動作)",
-          explanation: "表示同時進行兩個動作，重點通常放在後面的主要動詞上。",
-          examples: [
-            {
-              sentence: "速度を落としながら、ゆっくり曲がってください。",
-              reading: "そくどをおとしながら、ゆっくりまがってください。",
-              translation: "請一邊減速，一邊緩慢轉彎。"
-            }
-          ]
-        }
-      ];
-    } else {
-      mockData = [
-        {
-          grammarPoint: "～てください",
-          connection: "動詞 て形 + ください",
-          meaning: "請做某事",
-          explanation: "用於委婉或禮貌地請求、要求對方進行某項動作。",
-          examples: [
-            {
-              sentence: "本を読んでください。",
-              reading: "ほんをよんでください。",
-              translation: "請讀書。"
-            }
-          ]
-        },
-        {
-          grammarPoint: "～たいです",
-          connection: "動詞 ます形（去ます） + たいです",
-          meaning: "想要做某事",
-          explanation: "表達說話者自己（第一人稱）想要做某動作的願望。",
-          examples: [
-            {
-              sentence: "お茶を飲みたいです。",
-              reading: "おちゃをのみたいです。",
-              translation: "我想喝茶。"
-            }
-          ]
-        }
-      ];
-    }
-  } else if (contentStr.includes("Japanese reading text") || contentStr.includes("custom Japanese reading article") || contentStr.includes("story/article") || contentStr.includes("ReadingMaterial") || contentStr.includes("original short article") || contentStr.includes("generateRecommendedReading")) {
-    if (contentStr.includes("N1")) {
-      mockData = {
-        title: "日本語に現れる和の美意識 (日語中的和風美學觀)",
-        content: "言葉は、その言語を話す民族の精神文化を色濃く反映する鏡である。日本語の語彙における「もののあわれ」や「わびさび」は、自然のはかなさに美を見い出す独自の美意識の表象である。",
-        translation: "語言是生動反映說話民族精髓與精神文化的鏡子。日語詞彙中的「物哀」與「侘寂」，是以獨特美學視角在自然虛無消逝中尋見美感的表徵。",
-        tokens: [
-          {
-            text: "美意識",
-            dictionaryForm: "美意識",
-            reading: "びいしき",
-            meaning: "審美觀、美學概念",
-            type: "VOCAB",
-            jlpt: "N1",
-            exampleSentence: "日本の伝統的な美意識に触れる。",
-            exampleReading: "にほんのでんとうてきなびいしきにふれる。",
-            exampleTranslation: "接觸到日本傳統的審美觀與美學思維。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N2")) {
-      mockData = {
-        title: "新幹線の安全性と最新技術 (新幹線的安全性與全新科技)",
-        content: "1964年の開業以来、新幹線は乗車中の乗客の死亡事故を一度も起こしていない。これほどの安全性を維持できている背景には、高度運行管理システムがある。",
-        translation: "自1964年開業以來，新幹線從未發生過導致乘客死亡的重大事故。高水準安全性的維持背景正是源於極度精緻的高度火車運行管理系統。",
-        tokens: [
-          {
-            text: "維持",
-            dictionaryForm: "維持",
-            reading: "いじ",
-            meaning: "維護、維持現狀",
-            type: "VOCAB",
-            jlpt: "N2",
-            exampleSentence: "安全性を維持するために毎日点検します。",
-            exampleReading: "あんぜんせいをいじするためにまいにちてんけんします。",
-            exampleTranslation: "為了維持高度安全，每天都會進行車輛檢點運營。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N3")) {
-      mockData = {
-        title: "日本の伝統的な祭り (日本的傳統大祭典)",
-        content: "夏になると、日本のあちこちでお祭りが開かれます。人々は「浴衣」を着て、賑やかに太鼓を叩き、夏の訪れをお祝いします。",
-        translation: "一到了夏天，日本各個地方就會舉辦大祭典。人們穿上休閒的夏日浴衣相聚在一起，一邊熱烈敲著太鼓，祈福並慶祝盛夏的來臨。",
-        tokens: [
-          {
-            text: "伝統的",
-            dictionaryForm: "伝統的",
-            reading: "てんとうてき",
-            meaning: "傳統的、具有歷史傳承的",
-            type: "VOCAB",
-            jlpt: "N3",
-            exampleSentence: "日本の伝統的なお祭りに参加しました。",
-            exampleReading: "にほんのでんとうてきなおまつりにさんかしました。",
-            exampleTranslation: "我參加了日本傳統的慶典活動。"
-          }
-        ]
-      };
-    } else if (contentStr.includes("N4")) {
-      mockData = {
-        title: "京都の美味しい食べ物 (京都的美味佳餚)",
-        content: "京都には長い歴史があって、伝統的な料理がたくさんあります。特に「抹茶」で作られたデザートや、豆腐を使ったお料理は世界中で有名です。",
-        translation: "京都擁有悠久漫長的历史，有很多傳承下來的精湛料理。其中用「抹茶」熬製的精工甜點與鮮美豆腐料理在全世界都非常聞名。",
-        tokens: [
-          {
-            text: "歴史",
-            dictionaryForm: "歴史",
-            reading: "れきし",
-            meaning: "歷史",
-            type: "VOCAB",
-            jlpt: "N4",
-            exampleSentence: "歴史のあるお寺へ行きました。",
-            exampleReading: "れきしのあるおてらへいきました。",
-            exampleTranslation: "去了有歷史感的寺廟。"
-          }
-        ]
-      };
-    } else {
-      mockData = {
-        title: "富士山への旅行 (富士山之旅)",
-        content: "富士山は日本で一番高くて美しい山です。多くの観光客が毎年登ります。富士山の近くの湖はとても綺麗です。",
-        translation: "富士山是日本最高最美的山峰。每年有很多遊客前去登山。富士山附近的湖泊非常漂亮。",
-        tokens: [
-          {
-            text: "一番",
-            dictionaryForm: "一番",
-            reading: "いちばん",
-            meaning: "最、第一",
-            type: "VOCAB",
-            jlpt: "N5",
-            exampleSentence: "日本で一番高い山です。",
-            exampleReading: "にほんでいちばんたかいやまです。",
-            exampleTranslation: "是日本最高的山。"
-          }
-        ]
-      };
-    }
-  } else {
-    mockData = {
-      textAnswer: "（離線模式）請先在設定中配置 VITE_GEMINI_API_KEY 金鑰來體驗真實 AI 效果喔！",
-      detectedType: "DAILY_AFFAIRS",
-      sources: []
-    };
-  }
-
-  return {
-    text: JSON.stringify(mockData)
-  };
-};
+const MODEL_NAME = "gemini-2.5-flash";
+const REQUEST_TIMEOUT_MS = 15000;
 
 const getGeminiApiKey = (): string => {
-  const viteKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || "";
+  const viteKey =
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_GEMINI_API_KEY) || "";
   if (viteKey && viteKey !== "undefined") return viteKey;
   try {
-    const procKey = typeof process !== 'undefined' ? (process.env?.GEMINI_API_KEY || process.env?.API_KEY || "") : "";
+    const procKey =
+      typeof process !== "undefined" ? process.env?.GEMINI_API_KEY || process.env?.API_KEY || "" : "";
     if (procKey && procKey !== "undefined") return procKey;
   } catch {
-    // Ignore if process is not defined in browser
+    // Ignore when process is unavailable in browser
   }
   return "";
 };
 
 let globalAiInstance: GoogleGenAI | null = null;
+let cachedApiKey = "";
 
-const ai = new Proxy({} as any, {
-  get(target, prop) {
-    if (
-      typeof prop === 'symbol' ||
-      prop === 'then' ||
-      prop === 'toJSON' ||
-      prop === 'constructor' ||
-      prop === 'prototype'
-    ) {
-      return undefined;
-    }
-
-    const key = getGeminiApiKey();
-    if (!key) {
-      if (prop === 'models') {
-        return {
-          generateContent: mockGenerateContent
-        };
-      }
-      return undefined;
-    }
-
-    if (!globalAiInstance) {
-      globalAiInstance = new GoogleGenAI({ apiKey: key });
-    }
-    const val = (globalAiInstance as any)[prop];
-    if (typeof val === 'function') {
-      return val.bind(globalAiInstance);
-    }
-    return val;
+const getAiClient = (): GoogleGenAI => {
+  const key = getGeminiApiKey();
+  if (!key) {
+    throw new Error("尚未設定 Gemini API 金鑰（請確認環境變數 VITE_GEMINI_API_KEY），無法連線解析。");
   }
-}) as unknown as GoogleGenAI;
-
-// --- WORD SCHEMA ---
-const wordDefinitionSchema = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      word: { type: Type.STRING, description: "The Japanese word (Kanji or Kana)" },
-      reading: { type: Type.STRING, description: "The Hiragana reading of the word" },
-      romaji: { type: Type.STRING, description: "Hepburn Romaji pronunciation of the word (e.g. watashi, tokei, taberu)" },
-      pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
-      partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, 他動詞, 自動詞, い形容詞, な形容詞, 副詞" },
-      meaning: { type: Type.STRING, description: "Traditional Chinese meaning" },
-      examples: {
-        type: Type.ARRAY,
-        description: "2 to 3 natural Japanese example sentences with readings and Chinese translations",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            sentence: { type: Type.STRING, description: "Japanese sentence" },
-            reading: { type: Type.STRING, description: "Hiragana reading of sentence" },
-            translation: { type: Type.STRING, description: "Traditional Chinese translation" }
-          },
-          required: ["sentence", "reading", "translation"]
-        }
-      },
-      exampleSentence: { type: Type.STRING, description: "First Japanese example sentence" },
-      exampleReading: { type: Type.STRING, description: "Hiragana reading of the example sentence" },
-      exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the example sentence" },
-      sentenceBreakdown: {
-        type: Type.ARRAY,
-        description: "A list of key vocabulary words found in the example sentence",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            word: { type: Type.STRING, description: "The word as it appears or dictionary form" },
-            reading: { type: Type.STRING, description: "Hiragana reading" },
-            meaning: { type: Type.STRING, description: "Brief Chinese meaning" }
-          },
-          required: ["word", "reading", "meaning"]
-        }
-      }
-    },
-    required: ["word", "reading", "romaji", "pitchAccent", "meaning", "exampleSentence", "exampleReading", "exampleTranslation"],
-  },
+  if (!globalAiInstance || cachedApiKey !== key) {
+    globalAiInstance = new GoogleGenAI({ apiKey: key });
+    cachedApiKey = key;
+  }
+  return globalAiInstance;
 };
 
-// --- GRAMMAR SCHEMA ---
-const grammarSchema = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      grammarPoint: { type: Type.STRING, description: "The grammar pattern (e.g., ～ことになる)" },
-      connection: { type: Type.STRING, description: "Detailed connection rule (e.g., 動詞連用形 / 去ます + 變化, 名詞 + の, 動詞辭書形 + ...)" },
-      meaning: { type: Type.STRING, description: "Meaning in Traditional Chinese" },
-      explanation: { type: Type.STRING, description: "Detailed explanation of nuance and usage in Traditional Chinese" },
-      examples: {
-        type: Type.ARRAY,
-        description: "2 to 3 natural Japanese example sentences",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            sentence: { type: Type.STRING, description: "Japanese example sentence" },
-            reading: { type: Type.STRING, description: "Hiragana reading of the sentence" },
-            translation: { type: Type.STRING, description: "Traditional Chinese translation" },
-            breakdown: {
-              type: Type.ARRAY,
-              description: "Key vocabulary words used in this sentence with reading and Chinese meaning",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  word: { type: Type.STRING, description: "Japanese word as it appears or dictionary form" },
-                  reading: { type: Type.STRING, description: "Hiragana reading" },
-                  meaning: { type: Type.STRING, description: "Traditional Chinese meaning" }
-                },
-                required: ["word", "reading", "meaning"]
-              }
-            }
-          },
-          required: ["sentence", "reading", "translation"],
-        },
-      },
-    },
-    required: ["grammarPoint", "connection", "meaning", "explanation", "examples"],
-  },
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("GEMINI_TIMEOUT"));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 };
 
-// --- READING SCHEMA ---
-const readingSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING, description: "A suitable title for the text" },
-    content: { type: Type.STRING, description: "The full Japanese article content" },
-    translation: { type: Type.STRING, description: "Traditional Chinese translation of the article" },
-    tokens: {
-      type: Type.ARRAY,
-      description: "A highly comprehensive list of key vocabulary and grammar points found in the text. Make sure to extract a generous, rich selection of words, deliberately containing simple/everyday words, intermediate vocabulary, advanced/difficult terms, and proper nouns/domain-specific terms (專有名詞 / 專業術語). Do not be overly selective; provide a thorough lexical breakdown.",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING, description: "The word/grammar as it appears in text" },
-          dictionaryForm: { type: Type.STRING, description: "Dictionary form" },
-          reading: { type: Type.STRING, description: "Hiragana reading of the word" },
-          meaning: { type: Type.STRING, description: "Meaning in context (Traditional Chinese)" },
-          type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] },
-          jlpt: { type: Type.STRING, enum: ["N5", "N4", "N3", "N2", "N1", "Unknown"], description: "The JLPT level. Use N5 for basic/easy/everyday words, N4/N3 for intermediate, N2/N1 for advanced/hard words, and 'Unknown' specifically for proper nouns, place names, technical terminology, names, or brand terms." },
-          partOfSpeech: { type: Type.STRING, description: "Part of speech e.g. 名詞, 一段動詞, 五段動詞, い形容詞, な形容詞, 副詞, 句型" },
-          pitchAccent: { type: Type.STRING, description: "Pitch accent e.g. 平板型 [0], 頭高型 [1], 中高型 [2], 尾高型 [3]" },
-          exampleSentence: { type: Type.STRING, description: "Primary natural Japanese example sentence using this token" },
-          exampleReading: { type: Type.STRING, description: "Hiragana reading of the primary example sentence" },
-          exampleTranslation: { type: Type.STRING, description: "Traditional Chinese translation of the primary example sentence" },
-          examples: {
-            type: Type.ARRAY,
-            description: "1 to 2 natural Japanese example sentences with readings and Chinese translations",
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                sentence: { type: Type.STRING, description: "Japanese example sentence" },
-                reading: { type: Type.STRING, description: "Hiragana reading of sentence" },
-                translation: { type: Type.STRING, description: "Traditional Chinese translation" }
-              },
-              required: ["sentence", "reading", "translation"]
-            }
-          }
+const mapGeminiError = (err: any, actionLabel: string): Error => {
+  if (err?.message === "GEMINI_TIMEOUT") {
+    return new Error(`${actionLabel}連線逾時（超過 15 秒未回應），請稍後再試或檢查網路連線。`);
+  }
+
+  const rawMsg = String(err?.message || err || "");
+  const status = err?.status || err?.code;
+
+  if (status === 429 || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota") || rawMsg.includes("429")) {
+    return new Error("目前查詢人數較多或免費 API 額度暫滿，請稍後幾秒再試。");
+  }
+  if (
+    status === 400 ||
+    status === 403 ||
+    rawMsg.includes("API_KEY_INVALID") ||
+    rawMsg.includes("PERMISSION_DENIED") ||
+    rawMsg.includes("金鑰")
+  ) {
+    return new Error("Gemini API 金鑰無效或未設定，請確認 VITE_GEMINI_API_KEY。");
+  }
+  if (status === 404 || rawMsg.includes("NOT_FOUND")) {
+    return new Error(`無法存取 AI 模型（${MODEL_NAME}），請確認模型設定是否正確。`);
+  }
+  if (status === 500 || status === 503 || rawMsg.includes("UNAVAILABLE")) {
+    return new Error("AI 伺服器暫時忙碌，請稍後幾秒再試。");
+  }
+
+  return new Error(rawMsg ? `${actionLabel}失敗：${rawMsg}` : `${actionLabel}失敗，請確認網路連線後再試。`);
+};
+
+const callGeminiJson = async <T>(
+  contents: string,
+  responseSchema: any,
+  actionLabel: string,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<T> => {
+  try {
+    const client = getAiClient();
+    const response = await withTimeout(
+      client.models.generateContent({
+        model: MODEL_NAME,
+        contents,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema,
         },
-        required: ["text", "dictionaryForm", "reading", "meaning", "type", "jlpt", "exampleSentence", "exampleReading", "exampleTranslation"]
-      }
+      }),
+      timeoutMs
+    );
+
+    const rawText = response.text?.trim();
+    if (!rawText) {
+      throw new Error("AI 回傳內容為空，請稍後再試。");
     }
-  },
-  required: ["title", "content", "translation", "tokens"]
+
+    return JSON.parse(rawText) as T;
+  } catch (err: any) {
+    console.error(`[日本語ごご！] ${actionLabel}錯誤:`, err);
+    throw mapGeminiError(err, actionLabel);
+  }
 };
 
-// --- QUIZ SCHEMA ---
-const quizSchema = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING, description: "Unique ID" },
-      context: { type: Type.STRING, description: "Context text (e.g., short article, sentence background, or spoken script for listening)" },
-      question: { type: Type.STRING, description: "Question text. For ordering, use segments like (A) (B) (C). For fill-in-blank, use ___." },
-      sentence: { type: Type.STRING, description: "For ordering questions: the template sentence with context and numbered slots (e.g. '（駅の改札が混雑中なので、）\\n①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。')" },
-      scrambleItems: { 
-        type: Type.ARRAY, 
-        items: { type: Type.STRING }, 
-        description: "For ordering questions: the 4 candidate word fragments to arrange, e.g. ['人が', '少なく', 'なって', 'から'] without numeric prefixes" 
-      },
-      instruction: { type: Type.STRING, description: "For ordering questions: instruction text, e.g. '★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。'" },
-      questionReading: { type: Type.STRING, description: "Full Hiragana/Katakana reading for the question text" },
-      questionTranslation: { type: Type.STRING, description: "Traditional Chinese translation for the question text" },
-      options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 options" },
-      correctAnswerIndex: { type: Type.INTEGER, description: "Index 0-3" },
-      explanation: { type: Type.STRING, description: "Detailed explanation in Traditional Chinese. Must explain the grammar/vocabulary used." },
-      type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "listening", "reading"], description: "The type of question being generated" },
-      transcript: { type: Type.STRING, description: "For listening questions: pure conversation script without any XML/HTML/SSML tags" },
-      dialogueLines: {
-        type: Type.ARRAY,
-        description: "For listening questions: structured lines with speaker, text, and gender ('male' | 'female')",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            speaker: { type: Type.STRING },
-            text: { type: Type.STRING },
-            gender: { type: Type.STRING, enum: ["male", "female"] }
-          },
-          required: ["speaker", "text", "gender"]
-        }
-      }
-    },
-    required: ["id", "question", "questionReading", "questionTranslation", "options", "correctAnswerIndex", "explanation", "type"],
-  },
+// --- LOCALSTORAGE CACHE HELPERS ---
+const readLocalCache = <T>(mode: "WORD" | "GRAMMAR" | "READING", query: string): T | null => {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const key = `gogo_cache_${mode}_${query.trim()}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    console.warn("Failed to read localStorage cache:", e);
+    return null;
+  }
 };
 
-/**
- * 將日文平假名／片假名轉換為標準赫本式羅馬拼音 (Hepburn Romaji)
- */
+const writeLocalCache = <T>(mode: "WORD" | "GRAMMAR" | "READING", query: string, data: T): void => {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const key = `gogo_cache_${mode}_${query.trim()}`;
+    window.localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn("Failed to write localStorage cache:", e);
+  }
+};
+
+// --- HEPBURN ROMAJI HELPER (用於補全沒有 romaji 的舊快取或缺失欄位) ---
 export const toHepburnRomaji = (kana: string): string => {
-  if (!kana) return '';
-  // 將片假名轉換為平假名進行統一比對
-  const h = kana.replace(/[\u30a1-\u30f6]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+  if (!kana) return "";
+  const h = kana.replace(/[\u30a1-\u30f6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
 
   const digraphs: Record<string, string> = {
-    'きゃ': 'kya', 'きゅ': 'kyu', 'きょ': 'kyo',
-    'しゃ': 'sha', 'しゅ': 'shu', 'しょ': 'sho',
-    'ちゃ': 'cha', 'ちゅ': 'chu', 'ちょ': 'cho',
-    'にゃ': 'nya', 'にゅ': 'nyu', 'にょ': 'nyo',
-    'ひゃ': 'hya', 'ひゅ': 'hyu', 'ひょ': 'hyo',
-    'みゃ': 'mya', 'みゅ': 'myu', 'みょ': 'myo',
-    'りゃ': 'rya', 'りゅ': 'ryu', 'りょ': 'ryo',
-    'ぎゃ': 'gya', 'ぎゅ': 'gyu', 'ぎょ': 'gyo',
-    'じゃ': 'ja', 'じゅ': 'ju', 'じょ': 'jo',
-    'びゃ': 'bya', 'びゅ': 'byu', 'びょ': 'byo',
-    'ぴゃ': 'pya', 'ぴゅ': 'pyu', 'ぴょ': 'pyo',
-    'しぇ': 'she', 'ちぇ': 'che', 'じぇ': 'je',
-    'てぃ': 'ti', 'でぃ': 'di', 'ふぁ': 'fa',
-    'ふぃ': 'fi', 'ふぇ': 'fe', 'ふぉ': 'fo',
-    'うぃ': 'wi', 'うぇ': 'we', 'うぉ': 'wo'
+    きゃ: "kya", きゅ: "kyu", きょ: "kyo",
+    しゃ: "sha", しゅ: "shu", しょ: "sho",
+    ちゃ: "cha", ちゅ: "chu", ちょ: "cho",
+    にゃ: "nya", にゅ: "nyu", にょ: "nyo",
+    ひゃ: "hya", ひゅ: "hyu", ひょ: "hyo",
+    みゃ: "mya", みゅ: "myu", みょ: "myo",
+    りゃ: "rya", りゅ: "ryu", りょ: "ryo",
+    ぎゃ: "gya", ぎゅ: "gyu", ぎょ: "gyo",
+    じゃ: "ja", じゅ: "ju", じょ: "jo",
+    びゃ: "bya", びゅ: "byu", びょ: "byo",
+    ぴゃ: "pya", ぴゅ: "pyu", ぴょ: "pyo",
+    しぇ: "she", ちぇ: "che", じぇ: "je",
+    てぃ: "ti", でぃ: "di", ふぁ: "fa",
+    ふぃ: "fi", ふぇ: "fe", ふぉ: "fo",
+    うぃ: "wi", うぇ: "we", うぉ: "wo",
   };
 
   const monographs: Record<string, string> = {
-    'あ': 'a', 'い': 'i', 'う': 'u', 'え': 'e', 'お': 'o',
-    'か': 'ka', 'き': 'ki', 'く': 'ku', 'け': 'ke', 'こ': 'ko',
-    'さ': 'sa', 'し': 'shi', 'す': 'su', 'せ': 'se', 'そ': 'so',
-    'た': 'ta', 'ち': 'chi', 'つ': 'tsu', 'て': 'te', 'と': 'to',
-    'な': 'na', 'に': 'ni', 'ぬ': 'nu', 'ね': 'ne', 'の': 'no',
-    'は': 'ha', 'ひ': 'hi', 'ふ': 'fu', 'へ': 'he', 'ほ': 'ho',
-    'ま': 'ma', 'み': 'mi', 'む': 'mu', 'め': 'me', 'も': 'mo',
-    'や': 'ya', 'ゆ': 'yu', 'よ': 'yo',
-    'ら': 'ra', 'り': 'ri', 'る': 'ru', 'れ': 're', 'ろ': 'ro',
-    'わ': 'wa', 'を': 'o', 'ん': 'n',
-    'が': 'ga', 'ぎ': 'gi', 'ぐ': 'gu', 'げ': 'ge', 'ご': 'go',
-    'ざ': 'za', 'じ': 'ji', 'ず': 'zu', 'ぜ': 'ze', 'ぞ': 'zo',
-    'だ': 'da', 'ぢ': 'ji', 'づ': 'zu', 'で': 'de', 'ど': 'do',
-    'ば': 'ba', 'び': 'bi', 'ぶ': 'bu', 'べ': 'be', 'ぼ': 'bo',
-    'ぱ': 'pa', 'ぴ': 'pi', 'ぷ': 'pu', 'ぺ': 'pe', 'ぽ': 'po',
-    'ぁ': 'a', 'ぃ': 'i', 'ぅ': 'u', 'ぇ': 'e', 'ぉ': 'o'
+    あ: "a", い: "i", う: "u", え: "e", お: "o",
+    か: "ka", き: "ki", く: "ku", け: "ke", こ: "ko",
+    さ: "sa", し: "shi", す: "su", せ: "se", そ: "so",
+    た: "ta", ち: "chi", つ: "tsu", て: "te", と: "to",
+    な: "na", に: "ni", ぬ: "nu", ね: "ne", の: "no",
+    は: "ha", ひ: "hi", ふ: "fu", へ: "he", ほ: "ho",
+    ま: "ma", み: "mi", む: "mu", め: "me", も: "mo",
+    や: "ya", ゆ: "yu", よ: "yo",
+    ら: "ra", り: "ri", る: "ru", れ: "re", ろ: "ro",
+    わ: "wa", を: "o", ん: "n",
+    が: "ga", ぎ: "gi", ぐ: "gu", げ: "ge", ご: "go",
+    ざ: "za", じ: "ji", ず: "zu", ぜ: "ze", ぞ: "zo",
+    だ: "da", ぢ: "ji", づ: "zu", で: "de", ど: "do",
+    ば: "ba", び: "bi", ぶ: "bu", べ: "be", ぼ: "bo",
+    ぱ: "pa", ぴ: "pi", ぷ: "pu", ぺ: "pe", ぽ: "po",
+    ぁ: "a", ぃ: "i", ぅ: "u", ぇ: "e", ぉ: "o",
   };
 
-  let result = '';
+  let result = "";
   let i = 0;
   while (i < h.length) {
     if (i + 1 < h.length) {
@@ -903,24 +193,18 @@ export const toHepburnRomaji = (kana: string): string => {
         continue;
       }
     }
-
-    if (h[i] === 'っ') {
+    if (h[i] === "っ") {
       if (i + 1 < h.length) {
-        let nextRomaji = '';
-        if (i + 2 < h.length && digraphs[h.slice(i + 1, i + 3)]) {
-          nextRomaji = digraphs[h.slice(i + 1, i + 3)];
-        } else if (monographs[h[i + 1]]) {
-          nextRomaji = monographs[h[i + 1]];
-        }
+        const nextRomaji =
+          (i + 2 < h.length && digraphs[h.slice(i + 1, i + 3)]) || monographs[h[i + 1]] || "";
         if (nextRomaji) {
-          result += nextRomaji.startsWith('ch') ? 't' : nextRomaji[0];
+          result += nextRomaji.startsWith("ch") ? "t" : nextRomaji[0];
         }
       }
       i++;
       continue;
     }
-
-    if (h[i] === 'ー') {
+    if (h[i] === "ー") {
       const lastChar = result.slice(-1);
       if (/[aeiou]/.test(lastChar)) {
         result += lastChar;
@@ -928,575 +212,613 @@ export const toHepburnRomaji = (kana: string): string => {
       i++;
       continue;
     }
-
-    if (monographs[h[i]]) {
-      result += monographs[h[i]];
-    } else {
-      result += h[i];
-    }
+    result += monographs[h[i]] || h[i];
     i++;
   }
-
   return result;
 };
 
+const formatPitchAccent = (pitch: string | number | undefined): string => {
+  const raw = String(pitch ?? "0").trim();
+  if (!raw) return "平板型 [0]";
+  if (raw.includes("[")) return raw;
+  const numMatch = raw.match(/\d+/);
+  const num = numMatch ? numMatch[0] : raw;
+  if (num === "0") return "平板型 [0]";
+  if (num === "1") return "頭高型 [1]";
+  return `中高/尾高 [${num}]`;
+};
+
+const normalizeWordDefinition = (raw: any, index: number): WordDefinition => {
+  const furigana = String(raw.furigana || raw.reading || "").trim();
+  const word = String(raw.word || furigana || "").trim();
+  const romaji = String(raw.romaji || toHepburnRomaji(furigana || word)).trim();
+
+  const meaningsArray: string[] = Array.isArray(raw.meanings)
+    ? raw.meanings.map((m: any) => String(m).trim()).filter(Boolean)
+    : raw.meaning
+    ? [String(raw.meaning).trim()]
+    : [];
+  const meaningText = meaningsArray.join("；");
+
+  const pitchVal = String(raw.pitch ?? raw.pitchAccent ?? "0").trim();
+  const pitchAccent = formatPitchAccent(pitchVal);
+
+  const examples = Array.isArray(raw.examples)
+    ? raw.examples.slice(0, 2).map((ex: any) => ({
+        sentence: String(ex?.sentence || "").trim(),
+        reading: String(ex?.reading || "").trim(),
+        translation: String(ex?.translation || "").trim(),
+      }))
+    : raw.exampleSentence
+    ? [
+        {
+          sentence: String(raw.exampleSentence).trim(),
+          reading: String(raw.exampleReading || "").trim(),
+          translation: String(raw.exampleTranslation || "").trim(),
+        },
+      ]
+    : [];
+
+  return {
+    id: raw.id || `w-${Date.now()}-${index}`,
+    word,
+    reading: furigana,
+    furigana,
+    romaji,
+    pitch: pitchVal.replace(/[^\d]/g, "") || pitchVal,
+    pitchAccent,
+    partOfSpeech: String(raw.partOfSpeech || "").trim(),
+    meanings: meaningsArray,
+    meaning: meaningText,
+    examples,
+    exampleSentence: examples[0]?.sentence || "",
+    exampleReading: examples[0]?.reading || "",
+    exampleTranslation: examples[0]?.translation || "",
+  };
+};
+
+// --- COMPACT SCHEMAS ---
+const wordDefinitionSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      word: { type: Type.STRING, description: "漢字或原詞" },
+      furigana: { type: Type.STRING, description: "平假名讀音" },
+      romaji: { type: Type.STRING, description: "赫本式羅馬拼音" },
+      meanings: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "繁體中文釋義陣列",
+      },
+      pitch: { type: Type.STRING, description: "重音數字，例如 0, 1, 2" },
+      partOfSpeech: { type: Type.STRING, description: "詞性，例如 名詞、五段動詞" },
+      examples: {
+        type: Type.ARRAY,
+        description: "1至2句實用例句",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            sentence: { type: Type.STRING },
+            reading: { type: Type.STRING },
+            translation: { type: Type.STRING },
+          },
+          required: ["sentence", "reading", "translation"],
+        },
+      },
+    },
+    required: ["word", "furigana", "romaji", "meanings", "pitch", "examples"],
+  },
+};
+
+const grammarSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      grammarPoint: { type: Type.STRING, description: "文法句型" },
+      connection: { type: Type.STRING, description: "接續方式（繁體中文）" },
+      meaning: { type: Type.STRING, description: "核心中文語意" },
+      explanation: { type: Type.STRING, description: "簡潔精準的用法與語氣說明（繁體中文）" },
+      examples: {
+        type: Type.ARRAY,
+        description: "2句實用例句與重點詞彙整理",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            sentence: { type: Type.STRING },
+            reading: { type: Type.STRING },
+            translation: { type: Type.STRING },
+            breakdown: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  word: { type: Type.STRING },
+                  reading: { type: Type.STRING },
+                  meaning: { type: Type.STRING },
+                },
+                required: ["word", "reading", "meaning"],
+              },
+            },
+          },
+          required: ["sentence", "reading", "translation"],
+        },
+      },
+    },
+    required: ["grammarPoint", "connection", "meaning", "explanation", "examples"],
+  },
+};
+
+const readingSchema = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, description: "文章標題" },
+    content: { type: Type.STRING, description: "日文原文" },
+    translation: { type: Type.STRING, description: "流暢的繁體中文逐句對照翻譯" },
+    tokens: {
+      type: Type.ARRAY,
+      description: "萃取重點單字與文法",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING },
+          dictionaryForm: { type: Type.STRING },
+          reading: { type: Type.STRING },
+          meaning: { type: Type.STRING },
+          type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] },
+          jlpt: { type: Type.STRING, enum: ["N5", "N4", "N3", "N2", "N1", "Unknown"] },
+          partOfSpeech: { type: Type.STRING },
+          pitchAccent: { type: Type.STRING },
+          exampleSentence: { type: Type.STRING },
+          exampleReading: { type: Type.STRING },
+          exampleTranslation: { type: Type.STRING },
+        },
+        required: [
+          "text",
+          "dictionaryForm",
+          "reading",
+          "meaning",
+          "type",
+          "jlpt",
+          "exampleSentence",
+          "exampleReading",
+          "exampleTranslation",
+        ],
+      },
+    },
+  },
+  required: ["title", "content", "translation", "tokens"],
+};
+
+const quizSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      id: { type: Type.STRING },
+      type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "reading"] },
+      context: { type: Type.STRING, description: "閱讀題短文本文（僅 reading 題型填寫 80~120 字日文短文，其餘題型留空字串）" },
+      instruction: { type: Type.STRING, description: "JLPT 作答指示語" },
+      question: { type: Type.STRING, description: "題幹句子（漢字讀音用【漢字】標示，填空用 ___，重組用 ①＿＿ ②＿＿ ③★＿＿ ④＿＿）" },
+      sentence: { type: Type.STRING, description: "重組題專用：含前置語境與 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 的完整句型" },
+      scrambleItems: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "重組題專用：4 個純詞段（無編號、無句號）",
+      },
+      questionReading: { type: Type.STRING, description: "題幹完整平假名讀音" },
+      questionTranslation: { type: Type.STRING, description: "題幹繁體中文翻譯" },
+      options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 個純文字選項（無 A/B/C/D 或 1/2/3/4 前綴）" },
+      correctAnswerIndex: { type: Type.INTEGER, description: "正解索引 0~3" },
+      explanation: { type: Type.STRING, description: "精準繁體中文詳解" },
+    },
+    required: [
+      "id",
+      "type",
+      "instruction",
+      "question",
+      "questionReading",
+      "questionTranslation",
+      "options",
+      "correctAnswerIndex",
+      "explanation",
+    ],
+  },
+};
+
+// ==========================================
+// 1. 單字查詢（LocalStorage 快取 + Gemini 2.5 Flash）
+// ==========================================
 export const fetchWordDefinitions = async (query: string): Promise<WordDefinition[]> => {
   const queryStr = query.trim();
   if (!queryStr) return [];
-  const cacheKey = `gogo_cache_${queryStr}`;
 
-  // 1. 先檢查瀏覽器的 localStorage 快取，若以前查過就直接回傳結果（0 秒顯示）
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      const cached = window.localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((item: WordDefinition) => ({
-            ...item,
-            romaji: item.romaji || toHepburnRomaji(item.reading || item.word)
-          }));
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to read word cache from localStorage:", e);
-    }
+  const cached = readLocalCache<WordDefinition[]>("WORD", queryStr);
+  if (Array.isArray(cached) && cached.length > 0) {
+    return cached.map((item, idx) => normalizeWordDefinition(item, idx));
   }
 
-  // 2. 若沒查過，檢查 API 金鑰並直接呼叫 Gemini API 進行完整日文解析
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    throw new Error("尚未設定 Gemini API 金鑰（請確認環境變數 VITE_GEMINI_API_KEY），無法查詢單字解析。");
+  const prompt = `解析日文單字：「${queryStr}」（若有多個詞請逐一解析）。
+要求：
+1. word(漢字或原詞)、furigana(平假名)、romaji(赫本拼音)、meanings(繁體中文釋義陣列)、pitch(重音數字如"0","1")、partOfSpeech(詞性)。
+2. examples：1~2句自然實用例句（sentence, reading, translation繁體中文）。
+3. 嚴禁任何表情符號(Emoji)，回覆精簡勿贅述。`;
+
+  const rawList = await callGeminiJson<any[]>(prompt, wordDefinitionSchema, "單字解析");
+  if (!Array.isArray(rawList) || rawList.length === 0) {
+    throw new Error(`找不到「${queryStr}」的日文解析結果，請確認輸入內容後再試。`);
   }
 
-  try {
-    const apiCallPromise = ai.models.generateContent({
-      model: "gemini-4-hydrogen",
-      contents: `
-        You are an expert Japanese linguist and dictionary lexicographer.
-        Analyze the following Japanese word(s) or input:
-        "${queryStr}"
-
-        MANDATORY REQUIREMENTS:
-        1. Provide the exact Japanese word (Kanji or Kana).
-        2. Provide accurate Hiragana reading (假名標音).
-        3. Provide standard Hepburn Romaji pronunciation (羅馬拼音，例如：watashi, taberu).
-        4. Provide precise Pitch Accent (重音 / 聲調，例如：平板型 [0]、頭高型 [1]、中高型 [2]、尾高型 [3]).
-        5. Provide Part of Speech (詞性，例如：名詞、他動詞、自動詞、い形容詞、な形容詞、副詞).
-        6. Provide clear, concise Traditional Chinese definition (繁體中文釋義).
-        7. Provide 2 to 3 natural Japanese example sentences with complete Hiragana readings and Traditional Chinese translations, plus fill exampleSentence / exampleReading / exampleTranslation from the first example.
-        8. Provide sentenceBreakdown for key vocabulary in the first example sentence.
-        9. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
-        
-        Response Language: Traditional Chinese (繁體中文).
-      `,
-      config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
-    });
-
-    // 15 秒請求逾時保護（逾時即直接拋出錯誤，不回傳假資料）
-    let timeoutTimer: any;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutTimer = setTimeout(() => {
-        reject(new Error("GEMINI_TIMEOUT"));
-      }, 15000);
-    });
-
-    const response = await Promise.race([apiCallPromise, timeoutPromise]);
-    clearTimeout(timeoutTimer);
-
-    const rawText = response.text?.trim();
-    if (!rawText) {
-      throw new Error("Gemini API 回傳內容為空，請稍後再試。");
-    }
-
-    const data = JSON.parse(rawText) as WordDefinition[];
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error(`找不到「${queryStr}」的相關日文解析結果，請確認輸入內容後再試。`);
-    }
-
-    const formattedData = data.map((d, i) => {
-      let exList = d.examples && d.examples.length > 0 ? d.examples : [];
-      if (exList.length === 0 && d.exampleSentence) {
-        exList = [{
-          sentence: d.exampleSentence,
-          reading: d.exampleReading || '',
-          translation: d.exampleTranslation || ''
-        }];
-      }
-      return {
-        ...d,
-        id: d.id || `w-${Date.now()}-${i}`,
-        romaji: d.romaji || toHepburnRomaji(d.reading || d.word),
-        examples: exList
-      };
-    });
-
-    // 3. 查完拿到結果後，自動存入 localStorage 快取，方便下次秒開
-    if (typeof window !== 'undefined' && window.localStorage && formattedData.length > 0) {
-      try {
-        window.localStorage.setItem(cacheKey, JSON.stringify(formattedData));
-      } catch (e) {
-        console.warn("Failed to write word cache to localStorage:", e);
-      }
-    }
-
-    return formattedData;
-  } catch (err: any) {
-    console.error("[日本語ごご！] Gemini API 單字查詢失敗:", err);
-
-    if (err?.message === "GEMINI_TIMEOUT") {
-      throw new Error("解析請求逾時（超過 15 秒未回應），請檢查網路連線後重試。");
-    }
-
-    const rawMsg = String(err?.message || err || "");
-    const status = err?.status || err?.code;
-
-    if (status === 400 || status === 403 || rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("PERMISSION_DENIED")) {
-      throw new Error("Gemini API 金鑰無效或權限不足，請確認 VITE_GEMINI_API_KEY 設定。");
-    }
-    if (status === 429 || rawMsg.includes("RESOURCE_EXHAUSTED")) {
-      throw new Error("Gemini API 請求次數已達上限（429），請稍後再試。");
-    }
-    if (status === 404 || rawMsg.includes("NOT_FOUND")) {
-      throw new Error("指定的 Gemini 模型無法存取（404），請確認模型名稱設定。");
-    }
-    if (status === 500 || status === 503 || rawMsg.includes("UNAVAILABLE")) {
-      throw new Error("Gemini 伺服器暫時忙碌或無法連線（503），請稍後再試。");
-    }
-
-    throw new Error(rawMsg ? `單字解析失敗：${rawMsg}` : "單字解析失敗，請確認網路連線或稍後再試。");
-  }
+  const formatted = rawList.map((item, idx) => normalizeWordDefinition(item, idx));
+  writeLocalCache("WORD", queryStr, formatted);
+  return formatted;
 };
 
-/**
- * lookupJapanese: 字典單字解析核心函式（localStorage 快取優先，未命中則直接呼叫 Gemini API 並快取結果）
- */
 export const lookupJapanese = fetchWordDefinitions;
 
+// ==========================================
+// 2. 文法解析（LocalStorage 快取 + Gemini 2.5 Flash）
+// ==========================================
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `
-      You are an expert Japanese grammar specialist.
-      Analyze the following Japanese grammar pattern:
-      "${grammarInput}"
+  const queryStr = grammarInput.trim();
+  if (!queryStr) return [];
 
-      MANDATORY REQUIREMENTS:
-      1. grammarPoint: The canonical grammar pattern (e.g. ～はずです, ～わけにはいかない).
-      2. connection: Explicitly list grammatical conjugation rules (辭類接續變化規則，例如：動詞普通形 + はずです / い形容詞 + はずです / な形容詞 + な・である + はずです / 名詞 + の・である + はずです).
-      3. meaning: Clear, concise core meaning in Traditional Chinese.
-      4. explanation: Detailed explanation of nuance, speaker attitude, and usage distinctions.
-      5. examples: 2 to 3 natural Japanese example sentences with complete Hiragana readings, Traditional Chinese translations, and a 'breakdown' array containing 2 to 4 key vocabulary words used in each sentence with word, reading, and Chinese meaning.
-      6. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
-      
-      Response Language: Traditional Chinese (繁體中文).
-    `,
-    config: { responseMimeType: "application/json", responseSchema: grammarSchema },
-  });
-  const data = JSON.parse(response.text);
-  return data.map((d: any, i: number) => ({ ...d, id: `g-${Date.now()}-${i}` }));
+  const cached = readLocalCache<GrammarDefinition[]>("GRAMMAR", queryStr);
+  if (Array.isArray(cached) && cached.length > 0) {
+    return cached;
+  }
+
+  const prompt = `解析日文文法：「${queryStr}」。
+要求（繁體中文、精簡清晰）：
+1. grammarPoint(標準句型)、connection(接續規則)、meaning(核心語意)、explanation(語氣與使用注意)。
+2. examples：2句自然例句，含 sentence、reading(平假名)、translation(繁中) 及 2~3 個 breakdown 重點單字。
+3. 嚴禁 Emoji。`;
+
+  const data = await callGeminiJson<any[]>(prompt, grammarSchema, "文法解析");
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error(`找不到「${queryStr}」的文法解析結果，請確認輸入後再試。`);
+  }
+
+  const formatted: GrammarDefinition[] = data.map((d, i) => ({
+    ...d,
+    id: d.id || `g-${Date.now()}-${i}`,
+  }));
+
+  writeLocalCache("GRAMMAR", queryStr, formatted);
+  return formatted;
 };
 
+// ==========================================
+// 3. 文章解析（LocalStorage 快取 + Gemini 2.5 Flash）
+// ==========================================
+export const analyzeReadingText = async (input: string): Promise<ReadingMaterial> => {
+  const queryStr = input.trim();
+  if (!queryStr) {
+    throw new Error("請輸入欲解析的日文文章。");
+  }
+
+  const cached = readLocalCache<ReadingMaterial>("READING", queryStr);
+  if (cached && cached.content) {
+    return cached;
+  }
+
+  const prompt = `解析以下日文文章（精簡清晰、繁體中文、嚴禁 Emoji）：
+「${queryStr}」
+要求：
+1. title(簡潔標題)、content(完整原文)、translation(流暢繁中翻譯)。
+2. tokens：萃取文章重點單字(VOCAB)與文法(GRAMMAR)，提供 dictionaryForm、reading、meaning、jlpt、partOfSpeech、pitchAccent 與 1 句實用簡短例句(exampleSentence, exampleReading, exampleTranslation)。`;
+
+  const data = await callGeminiJson<Omit<ReadingMaterial, "id">>(prompt, readingSchema, "文章解析");
+  if (!data || !data.content) {
+    throw new Error("文章解析回傳格式不完整，請稍後再試。");
+  }
+
+  const formatted: ReadingMaterial = {
+    ...data,
+    id: `r-${Date.now()}`,
+  };
+
+  writeLocalCache("READING", queryStr, formatted);
+  return formatted;
+};
+
+// ==========================================
+// 4. 輔助查詢（句中單字、推薦詞彙/文法/文章）
+// ==========================================
 export const fetchSentenceVocabulary = async (sentence: string): Promise<SentenceWord[]> => {
   const schema = {
     type: Type.ARRAY,
-    description: "Vocabulary words extracted from the sentence",
     items: {
       type: Type.OBJECT,
       properties: {
-        word: { type: Type.STRING, description: "Japanese word" },
-        reading: { type: Type.STRING, description: "Hiragana reading" },
-        meaning: { type: Type.STRING, description: "Traditional Chinese meaning" }
+        word: { type: Type.STRING },
+        reading: { type: Type.STRING },
+        meaning: { type: Type.STRING },
       },
-      required: ["word", "reading", "meaning"]
-    }
+      required: ["word", "reading", "meaning"],
+    },
   };
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Extract 2 to 5 key vocabulary words from this Japanese sentence: "${sentence}". Provide dictionary form or base word, Hiragana reading, and Traditional Chinese meaning. STRICT ANTI-EMOJI RULE: Never output emojis.`,
-    config: { responseMimeType: "application/json", responseSchema: schema },
-  });
-  return JSON.parse(response.text) as SentenceWord[];
+  const prompt = `從日文例句「${sentence.trim()}」萃取 2~5 個重點單字（原形、平假名、繁中釋義，無 Emoji）。`;
+  return callGeminiJson<SentenceWord[]>(prompt, schema, "例句詞彙拆解");
 };
 
-export const fetchRecommendedWords = async (level: string, count: number, exclude: string[] = [], category?: string): Promise<WordDefinition[]> => {
-  const categoryPhrase = category ? ` belonging strictly to the category "${category}" (for example: daily terms, food/dining, transportation, travel, shopping)` : "";
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Recommend ${count} JLPT ${level} words${categoryPhrase}. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
-    config: { responseMimeType: "application/json", responseSchema: wordDefinitionSchema },
-  });
-  return JSON.parse(response.text) as WordDefinition[];
+export const fetchRecommendedWords = async (
+  level: string,
+  count: number,
+  exclude: string[] = [],
+  category?: string
+): Promise<WordDefinition[]> => {
+  const catText = category ? `、主題「${category}」` : "";
+  const excludeText = exclude.length > 0 ? `，排除：[${exclude.slice(0, 30).join(",")}]` : "";
+  const prompt = `推薦 ${count} 個 JLPT ${level}${catText}實用單字${excludeText}。回傳 word, furigana, romaji, meanings(繁中), pitch, partOfSpeech, examples(1~2句)，無 Emoji。`;
+  const rawList = await callGeminiJson<any[]>(prompt, wordDefinitionSchema, "推薦單字");
+  return rawList.map((item, idx) => normalizeWordDefinition(item, idx));
 };
 
-export const fetchRecommendedGrammar = async (level: string, count: number, exclude: string[]): Promise<GrammarDefinition[]> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Recommend ${count} JLPT ${level} grammar. Exclude: [${exclude.join(',')}]. Traditional Chinese (Taiwan). STRICT ANTI-EMOJI RULE: No emojis.`,
-    config: { responseMimeType: "application/json", responseSchema: grammarSchema },
-  });
-  const data = JSON.parse(response.text);
-  return data.map((d: any, i: number) => ({ ...d, id: `g-rec-${Date.now()}-${i}` }));
-};
-
-export const analyzeReadingText = async (input: string): Promise<ReadingMaterial> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `
-      You are an expert Japanese linguist.
-      Analyze the following Japanese text very carefully:
-      "${input}"
-
-      MANDATORY REQUIREMENTS:
-      1. Provide a concise title and the full article content.
-      2. Provide a complete, natural Traditional Chinese translation of the entire article text.
-      3. Extract key vocabulary (VOCAB) and grammar patterns (GRAMMAR) from this text with dictionary forms, Hiragana readings, pitch accents, parts of speech, contextual meanings, JLPT levels, and 1 to 2 natural Japanese example sentences each (including full sentence, Hiragana reading, and Traditional Chinese translation).
-      4. STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Pure text only.
-      
-      Response Language: Traditional Chinese (繁體中文).
-    `,
-    config: { responseMimeType: "application/json", responseSchema: readingSchema },
-  });
-  return { ...JSON.parse(response.text), id: `r-${Date.now()}` };
+export const fetchRecommendedGrammar = async (
+  level: string,
+  count: number,
+  exclude: string[]
+): Promise<GrammarDefinition[]> => {
+  const excludeText = exclude.length > 0 ? `，排除：[${exclude.slice(0, 30).join(",")}]` : "";
+  const prompt = `推薦 ${count} 個 JLPT ${level} 實用文法${excludeText}。繁體中文解說與2句例句，無 Emoji。`;
+  const data = await callGeminiJson<any[]>(prompt, grammarSchema, "推薦文法");
+  return data.map((d, i) => ({ ...d, id: `g-rec-${Date.now()}-${i}` }));
 };
 
 export const generateRecommendedReading = async (level: string): Promise<ReadingMaterial> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Write an engaging, highly random, and original short article/story in Japanese suitable for JLPT ${level} learners. The topic should be completely random (for example: Japanese food culture, a seasonal festival, travel adventures, dynamic daily interactions, or a whimsical tale). Return the response strictly matching the schema with full token breakdowns and traditional Chinese (Taiwan) translations.`,
-    config: { responseMimeType: "application/json", responseSchema: readingSchema },
+  const prompt = `創作一篇適合 JLPT ${level} 的簡短日文生活或文化短文（100~160字），附繁中標題、全文翻譯與重點詞彙文法 tokens，無 Emoji。`;
+  const data = await callGeminiJson<Omit<ReadingMaterial, "id">>(prompt, readingSchema, "推薦閱讀");
+  return { ...data, id: `r-rec-${Date.now()}` };
+};
+
+// ==========================================
+// 5. JLPT 模擬測驗出題（15 題拆為 3 個並行 5 題請求，確保 5 題型均分且不逾時）
+// ==========================================
+export interface DailyStudyQuizItem {
+  type: "WORD" | "GRAMMAR" | "READING";
+  term: string;
+  summary?: string;
+  detail?: string;
+  content?: string;
+}
+
+const buildCompactStudyContext = (items: DailyStudyQuizItem[]): { summaryText: string; articleText: string } => {
+  const terms: string[] = [];
+  let articleText = "";
+
+  for (const it of items) {
+    if (it.type === "READING" && it.content) {
+      if (!articleText) {
+        articleText = it.content.trim().slice(0, 600);
+      }
+      terms.push(`[文章] ${it.term}`);
+    } else {
+      terms.push(`[${it.type === "GRAMMAR" ? "文法" : "單字"}] ${it.term}${it.summary ? `(${it.summary.slice(0, 30)})` : ""}`);
+    }
+  }
+
+  return {
+    summaryText: terms.slice(0, 20).join("、"),
+    articleText,
+  };
+};
+
+const QUIZ_COMMON_RULES = `共用規則（嚴格遵守）：
+1. 繁體中文解說與翻譯，嚴禁 Emoji 與任何程式碼字樣（禁止 \\n 字面值、反引號）。
+2. options 固定 4 個純文字選項（禁止 A./1. 等前綴，結尾不可加句號）。
+3. correctAnswerIndex 為 0~3 整數；每題必附 questionReading（平假名）、questionTranslation（繁中）與精準繁中 explanation。`;
+
+const normalizeQuizBatch = (list: QuizQuestion[], prefix: string): QuizQuestion[] => {
+  if (!Array.isArray(list)) return [];
+  return list.map((q, idx) => {
+    const cleanOptions = Array.isArray(q.options)
+      ? q.options.slice(0, 4).map((opt) =>
+          String(opt || "")
+            .replace(/^[A-Da-d1-4][.、\s):-]+\s*/, "")
+            .replace(/[。.\s]+$/, "")
+            .trim()
+        )
+      : [];
+
+    const safeIdx =
+      typeof q.correctAnswerIndex === "number" && q.correctAnswerIndex >= 0 && q.correctAnswerIndex < 4
+        ? q.correctAnswerIndex
+        : 0;
+
+    return {
+      ...q,
+      id: q.id || `${prefix}_${Date.now()}_${idx}`,
+      options: cleanOptions,
+      correctAnswerIndex: safeIdx,
+    };
   });
-  return { ...JSON.parse(response.text), id: `r-rec-${Date.now()}` };
+};
+
+const fetchQuizBatch = async (prompt: string, batchTag: string): Promise<QuizQuestion[]> => {
+  const result = await callGeminiJson<QuizQuestion[]>(prompt, quizSchema, `測驗出題(${batchTag})`);
+  if (!Array.isArray(result) || result.length === 0) {
+    throw new Error(`測驗批次（${batchTag}）未回傳有效題目，請重試。`);
+  }
+  return normalizeQuizBatch(result, batchTag);
+};
+
+export const generateDailyStudyQuiz = async (
+  items: DailyStudyQuizItem[],
+  questionCount: number = 15
+): Promise<QuizQuestion[]> => {
+  const { summaryText, articleText } = buildCompactStudyContext(items);
+  const focusNote = summaryText
+    ? `測驗核心範圍：${summaryText}${articleText ? `\n參考文章節錄：「${articleText}」` : ""}`
+    : "測驗範圍：JLPT N4~N3 實用日語綜合能力";
+
+  // 15 題模式：拆成 3 個並行請求（每次 5 題），強制 5 種題型各 3 題
+  if (questionCount === 15) {
+    const batch1Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（無需文章 context，context 留空字串 ""）：
+${focusNote}
+
+題型配額（共 5 題）：
+- 第 1~3 題（3 題漢字讀音題, type:"vocab"）：instruction 固定為「下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。」。question 為完整自然日文句子並將目標漢字以【漢字】框出，options 為 4 個平假名。
+- 第 4~5 題（2 題單字選填題, type:"vocab"）：instruction 固定為「（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。question 為完整日文句子並以 ___ 挖空，選出最合文意的單字。
+
+${QUIZ_COMMON_RULES}
+請回傳剛好 5 題。`;
+
+    const batch2Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（context 留空字串 ""）：
+${focusNote}
+
+題型配額（共 5 題）：
+- 第 1 題（1 題單字選填題, type:"vocab"）：instruction 固定為「（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。question 含 ___ 挖空。
+- 第 2~4 題（3 題文法助詞與接續題, type:"grammar"）：instruction 固定為「文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。」。question 含 ___ 挖空，測試助詞、接續詞或動詞/形容詞變化，干擾項須有明確文法錯誤。
+- 第 5 題（1 題句子重組排序題, type:"ordering"）：instruction 固定為「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。sentence 須有前置語境並包含「①＿＿ ②＿＿ ③★＿＿ ④＿＿」，scrambleItems 與 options 為 4 個詞段，語法唯一解（4!=24 中僅1種順序合法，嚴禁對稱比較句多解），correctAnswerIndex 指向 ★ 位置詞段。
+
+${QUIZ_COMMON_RULES}
+請回傳剛好 5 題。`;
+
+    const batch3Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗：
+${focusNote}
+
+題型配額（共 5 題）：
+- 第 1~2 題（2 題句子重組排序題, type:"ordering"）：context 留空 ""；instruction 為「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」；sentence 須有前置語境並含「①＿＿ ②＿＿ ③★＿＿ ④＿＿」，scrambleItems 與 options 為 4 個詞段，語法唯一解（4!=24 中僅1種順序合法），correctAnswerIndex 指向 ★ 位置。
+- 第 3~5 題（3 題短文閱讀理解題, type:"reading"）：instruction 為「文章を読んで、次の問いに最も適した答えを選びなさい。」。每題必須於 context 撰寫一篇 80~120 字完全獨立、主題截然不同的日本生活或職場短文（例如：第1篇為職場郵件/會議通知、第2篇為日常交通/購物經驗、第3篇為社區公告/季節生活；若有提供參考文章，僅限其中1篇改編使用，其餘2篇必為全新主題），嚴禁重複句型模板。question 為針對該篇短文的精準理解提問。
+
+${QUIZ_COMMON_RULES}
+請回傳剛好 5 題。`;
+
+    const [b1, b2, b3] = await Promise.all([
+      fetchQuizBatch(batch1Prompt, "b1_kanji_vocab"),
+      fetchQuizBatch(batch2Prompt, "b2_vocab_grammar_order"),
+      fetchQuizBatch(batch3Prompt, "b3_order_reading"),
+    ]);
+
+    // 依嚴格題型區間組合：1~3 漢字讀音、4~6 單字選填、7~9 文法、10~12 重組、13~15 短文閱讀
+    const kanjiQs = b1.slice(0, 3).map((q) => ({ ...q, type: "vocab" as const, context: "" }));
+    const vocabFillQs = [...b1.slice(3, 5), ...b2.slice(0, 1)].map((q) => ({
+      ...q,
+      type: "vocab" as const,
+      context: "",
+    }));
+    const grammarQs = b2.slice(1, 4).map((q) => ({ ...q, type: "grammar" as const, context: "" }));
+    const orderingQs = [...b2.slice(4, 5), ...b3.slice(0, 2)].map((q) => ({
+      ...q,
+      type: "ordering" as const,
+      context: "",
+    }));
+    const readingQs = b3.slice(2, 5).map((q) => ({ ...q, type: "reading" as const }));
+
+    const combined = [...kanjiQs, ...vocabFillQs, ...grammarQs, ...orderingQs, ...readingQs];
+    for (const rq of readingQs) {
+      if (!rq.context || rq.context.trim().length < 30) {
+        throw new Error("閱讀題短文生成不完整，請點擊重新生成測驗。");
+      }
+    }
+    return combined;
+  }
+
+  // 10 題模式：拆成 2 個並行 5 題請求（5 題型各 2 題）
+  if (questionCount === 10) {
+    const batch1Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（context 留空 ""）：
+${focusNote}
+配額：
+- 第 1~2 題：漢字讀音題（type:"vocab", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
+- 第 3~4 題：單字選填題（type:"vocab", instruction:"（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
+- 第 5 題：文法助詞與接續題（type:"grammar", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
+${QUIZ_COMMON_RULES}
+回傳剛好 5 題。`;
+
+    const batch2Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗：
+${focusNote}
+配額：
+- 第 1 題：文法助詞與接續題（type:"grammar", context:"", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
+- 第 2~3 題：句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含前置語境與 ①＿＿ ②＿＿ ③★＿＿ ④＿＿，scrambleItems/options 4詞段，唯一解）。
+- 第 4~5 題：短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", 每題 context 須各有一篇獨立不同生活/職場主題的 80~120 字日文短文）。
+${QUIZ_COMMON_RULES}
+回傳剛好 5 題。`;
+
+    const [b1, b2] = await Promise.all([
+      fetchQuizBatch(batch1Prompt, "b10_1"),
+      fetchQuizBatch(batch2Prompt, "b10_2"),
+    ]);
+
+    const ordered = [
+      ...b1.slice(0, 2), // 漢字讀音 2
+      ...b1.slice(2, 4), // 單字選填 2
+      ...b1.slice(4, 5), // 文法 1
+      ...b2.slice(0, 1), // 文法 1
+      ...b2.slice(1, 3), // 排序 2
+      ...b2.slice(3, 5), // 閱讀 2
+    ];
+    return ordered;
+  }
+
+  // 5 題或 3 題單批次模式
+  const safeCount = questionCount <= 3 ? 3 : 5;
+  const singlePrompt =
+    safeCount === 3
+      ? `你是 JLPT 出題專家。根據以下內容設計 3 題日文測驗：
+${focusNote}
+配額：
+1. 漢字讀音題（type:"vocab", context:"", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
+2. 句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 且唯一解）。
+3. 短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", context須為獨立生活/職場 80~120 字短文）。
+${QUIZ_COMMON_RULES}
+回傳剛好 3 題。`
+      : `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（5 題型各 1 題）：
+${focusNote}
+配額：
+1. 漢字讀音題（type:"vocab", context:"", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
+2. 單字選填題（type:"vocab", context:"", instruction:"（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
+3. 文法助詞與接續題（type:"grammar", context:"", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
+4. 句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 且唯一解）。
+5. 短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", context須為獨立生活/職場 80~120 字短文）。
+${QUIZ_COMMON_RULES}
+回傳剛好 5 題。`;
+
+  return fetchQuizBatch(singlePrompt, `single_${safeCount}`);
 };
 
 export const generateQuizFromContent = async (
-  words: WordDefinition[], 
-  grammar: GrammarDefinition[], 
-  specificPrompt?: string, 
-  questionCount: number = 10,
+  words: WordDefinition[],
+  grammar: GrammarDefinition[],
+  specificPrompt?: string,
+  questionCount: number = 15,
   jlptLevel?: string,
   sourceArticle?: string
 ): Promise<QuizQuestion[]> => {
-  const isArticleQuiz = Boolean(sourceArticle?.trim());
-  const context = JSON.stringify({ 
-    words, 
-    grammar, 
-    rawInput: specificPrompt, 
-    targetLevel: jlptLevel,
-    sourceArticle: sourceArticle?.trim() || undefined,
-    isArticleQuiz
-  });
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `
-      Based on the following content context: ${context}
-      
-      Your goal is to generate a highly professional, diverse, and engaging Japanese quiz containing EXACTLY ${questionCount} questions.
-      
-      CRITICAL FOCUS ON USER ARTICLE AND CUSTOM INPUT:
-      - **ARTICLE-BASED QUIZ MODE (使用者貼出文章出題模式 - 依文章深度命題)**:
-        If 'sourceArticle' is provided (or if 'rawInput' contains a user-pasted Japanese article / reading text):
-        - You MUST strictly build the entire quiz directly based on the provided article!
-        - Extract authentic learning points across the whole article to test comprehensive understanding:
-          1. **vocab**: Extract vocabulary, kanji, and loanwords used in the article. Test kanji readings (拼音/假名標音), kanji writing from kana, loanword spelling, or target word contextual usage/fill-in-the-blank.
-          2. **grammar**: Select key grammar patterns, particles (は, が, を, に, で, と, から, まで, etc.), or verb/adjective conjugations (て形, ない形, 可能形, 受身形, 使役形, etc.) that appear in the article. Test them with clear blanks "___".
-          3. **ordering**: Pick an important clause or sentence structure from the article. Rearrange it into 4 segments following the strict 4-slot structure (①＿ ②＿ ③★＿ ④＿), ensuring 100% unique solution order with necessary preceding context.
-          4. **listening**: Construct a vivid 2-4 line Japanese spoken dialogue between two speakers (女： / 男：) discussing, reacting to, or role-playing the topic/events described in the article.
-          5. **reading**: Ask in-depth comprehension, detail, reason, or main idea questions directly based on the user's article.
-
-      - If 'rawInput' is provided (especially when containing Japanese words, vocabularies, sentences, or specific grammar topics input by the user) OR if 'words' / 'grammar' arrays are not empty, you MUST STRICTLY use these words and topics as the core subjects of the generated questions!
-      - DO NOT ignore user-entered words/topics or replace them with arbitrary, unrelated JLPT presets. Under all circumstances, the custom user input is the absolute HIGHEST priority constraint.
-      - If and only if no specific words, article, or 'rawInput' are provided and 'targetLevel' is set, match the general difficulty level of JLPT ${jlptLevel}.
-      - Otherwise, generate a well-balanced, general Japanese practice test matching the provided content.
-
-      **CRITICAL ANTI-SPOILER MANDATE (題目上方絕對禁止洩漏答案 - 嚴格維護測驗公平性)**:
-      - For "vocab", "grammar", and "ordering" questions:
-        - The 'context' property MUST be an EMPTY STRING ("") or null!
-        - NEVER output the unblanked target sentence, source paragraph, or the solution into the 'context' property!
-        - Doing so causes the application to display the complete sentence in a prompt/hint box right above the question, which leaks the answer immediately (e.g., student sees the missing word or the exact order of the sentence directly in the box above the question).
-        - All sentences with blanks (___) or numbered slots (①＿ ②＿ ③★＿ ④＿) MUST be placed strictly inside the 'question' property.
-      - For "reading" questions:
-        - The 'context' property MUST contain the article passage or relevant paragraphs for the user to read and answer the comprehension question.
-      - For "listening" questions:
-        - The 'context' property MUST contain the clean spoken dialogue script (without any XML/SSML tags) for the audio synthesizer to play, while remaining hidden from the user until revealed.
-      
-      You must distribute the requested ${questionCount} questions proportionally across the following 5 distinct types (aiming for roughly equal distribution, e.g., if count is 5, generate 1 of each; if count is 10, generate 2 of each; if count is 15, generate 3 of each; if count is 20, generate 4 of each):
-      
-      1. **Type: "vocab"** - VOCABULARY & KANJI & KANA JUDGMENT (單字漢字讀音與平假片假判斷題):
-         - *Kanji Reading (漢字讀音)*: Provide a sentence with a target Kanji in brackets (e.g. 「昨日」) and ask for the correct hiragana reading.
-         - *Kanji Writing (漢字書寫)*: Provide a sentence with a target Hiragana word in brackets (e.g. いっしょに「あそび」ましょう) and ask for the correct kanji spelling.
-         - *Kana Judgment (平假片假判斷)*: Test the spelling of common loanwords (e.g., 「コーヒー」, 「デパート」) or similar kana (シ/ツ, ソ/ン) or voiced/unvoiced sounds (e.g., 「てんぷら」 vs 「でんぷら」).
-         - *Word Usage (字彙用法)*: Choose the correct word (noun, verb, adjective, adverb) that fits the context semantically and grammatically.
-         
-      2. **Type: "grammar"** - GRAMMAR, CONJUGATION & PARTICLES (文法、接續與助詞填空題):
-         - Test specific JLPT grammar points (e.g., ～ている, ～ほうがいい, ～なければならない) or particles (は, が, を, に, で, と, も, から, まで) in clear blanks "___".
-         - Make sure the question prompts ask clearly for the correct particle or conjugation form that makes the sentence grammatically complete and natural.
-         - All distractor options (B, C, D) must have distinct, identifiable grammatical reasons for being incorrect (e.g., mismatched particle, impossible verb inflection, unnatural collocation).
-         
-      3. **Type: "ordering"** - SENTENCE ORDERING & ARRANGEMENT (句子重組與星號題 - 並び替え):
-         - 【JLPT 題目生成與審查規範 (最高規格絕對約束)】:
-           1. **唯一解約束（絕對要求）**:
-              - 重組題（星號題）所給的 4 個選項，在語意與文法組合上必須為「全宇宙唯一合法順序」！在 4! = 24 種排列中，除了正解之外，其餘 23 種組合在文法接續或語境邏輯上都必須完全無法成立。
-              - **嚴禁出現對稱句型而無前文的情境**：例如「AよりB」可與「BよりA」任意互換（如題目「私は ①_ ②_ ③★_ ④_ いいです」配選項「紅茶 / コーヒー / のほうが / より」，此時「コーヒーより紅茶」與「紅茶よりコーヒー」皆完全合法，造成雙重解或答案模糊，此類題目絕對嚴格禁止！）。
-              - **比較級與對立句型強制給出明確語境**：若使用比較級（如 ～より～のほうが）或對立句型，題幹開頭**必須給出明確原因、先決條件或語境**（例如：「コーヒーが苦手なので、私は ①＿ ②＿ ③★＿ ④＿ いいです。」），以語境鎖定唯一的主賓順序，徹底杜絕多解！
-           2. **標點與接續嚴謹度**:
-              - 選項單字（重組單字區之 4 個詞段）**絕對不得自帶結尾句號（。）**或題幹中已有的助詞或標點。
-              - 句型接續（動詞連用形、て形、名詞修飾、副詞修飾、格助詞搭配）必須僅有一種在語法上成立的排列方式。
-           3. **干擾項邏輯**:
-              - 錯誤選項（B、C、D）必須為明顯的文法錯誤或不自然接續，不得僅依靠前後主詞或名詞對調來充當選項。
-         - Follow this strict formatting structure for ordering questions:
-           - **'sentence'**: The Japanese template sentence with context and 4 numbered underlines:
-             e.g., "（駅の改札が混雑中なので、）
-①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。"
-             Use newline '
-' between the preceding context and the blank underlines to ensure clean line breaks.
-           - **'scrambleItems'**: Array of 4 unordered segments to arrange, WITHOUT numeric prefixes:
-             e.g., ["人が", "少なく", "なって", "から"]
-             Must be pure words/phrases WITHOUT "1." or "2." prefixes and WITHOUT ending periods (。).
-           - **'instruction'**: Standard JLPT instruction string:
-             "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
-           - **'question'**: Full integrated question text for backward compatibility:
-             "（駅の改札が混雑中なので、）
-①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。
-【1. 人が　2. 少なく　3. なって　4. から】
-★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
-           - **'options'**: Provide the 4 candidate words from 'scrambleItems' without alphabetical or numerical prefixes (e.g. ["人が", "少なく", "なって", "から"]). 'correctAnswerIndex' must accurately point to the index (0-3) of the word that belongs in the ★ (3rd space) position!
-           - **'explanation'**: MUST provide:
-             1. 完整正確句子 (e.g. 「駅の改札が混雑中なので、人が少なく（2）なって（3）から（4）行きましょう。」)
-             2. 正確排列順序 (e.g. 「1 → 2 → 3 → 4」)
-             3. ★ 處單字明確指認 (e.g. 「第 3 個空格（★）放入的是『3. なって』」)
-             4. 詳細文法剖析：解釋各詞段接續關係與助詞格位，並逐一指出為何其他順序無法成立。
-          
-      4. **Type: "listening"** - LISTENING COMPREHENSION SIMULATION (聽力情境模擬題):
-         - Since this is a visual app, you must simulate a listening question:
-           - **CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS (聽力原文純淨化 - 絕對禁止任何標籤)**:
-             - The generated 'context' (spoken script / 對話原文) **MUST NOT contain any XML, HTML, or SSML tags** (strictly NO <prosody>, NO </prosody>, NO <voice>, NO XML tags whatsoever).
-             - The transcript must contain ONLY pure, clean Japanese text with speaker markers (e.g. "女：", "男：").
-             - Example format:
-               "女：昨日、大切な書類をなくしちゃって本当に焦ったよ。
-男：えっ、本当？見つかったの？
-女：うん、同僚の机の上に置き忘れていただけだったの。"
-           - In the 'question' property, ask a comprehension question in Traditional Chinese about what was said (e.g. "兩個人在對話中討論了什麼？" or "女生最後在哪裡找到重要文件？").
-           
-      5. **Type: "reading"** - READING COMPREHENSION (閱讀理解題):
-         - In the 'context' property, provide a short 2-3 sentence Japanese dialogue, diary entry, memo, email, or daily scenario paragraph.
-         - In the 'question' property, ask a comprehension question in Traditional Chinese (e.g. "關於這段文章，下列敘述何者正確？", "主角今天打算要去做什麼？", or "這封電子郵件最主要的目的是什麼？").
-         
-      CRITICAL LANGUAGE & METADATA GUIDELINES:
-      - Use ONLY Traditional Chinese (zh-TW, 台灣繁體中文) for all explanations, instructions, options, and translations.
-      - **CRITICAL OPTION FORMATTING GUIDELINE**: The 4 elements inside the 'options' array **MUST NOT** contain any alphabetic or numeric prefixes (such as "A. ", "B. ", "C. ", "D. ", "A ", "B ", "C ", "D ", "A、", "B、", "C、", "D、" or "1. ", "2. ", "3. ", "4. "). Return only the **raw content/text** of the option itself. Do not add any alphabetical or numerical labels in front of options, as the client app shuffles the options and renders its own dynamic labels.
-      - **NO TRAILING PERIODS IN OPTIONS**: Segments inside 'options' must not end with Japanese period "。" or English period ".".
-      - 'questionReading': ALWAYS provide the full furigana/phonetic reading guide in Hiragana/Katakana for the complete 'question' text.
-      - 'questionTranslation': Provide a complete, beautiful, and natural Traditional Chinese translation of the whole 'question' text.
-      - 'explanation': Provide extremely detailed, step-by-step review explanations. Explicitly name the correct answer, explain the grammatical rules or lexical choices tested, and detail why other options do not fit or why they are incorrect.
-      - Ensure the 'type' property is correctly set to one of "vocab", "grammar", "ordering", "listening", or "reading" for each question.
-      
-      Return exactly ${questionCount} questions.
-    `,
-    config: { responseMimeType: "application/json", responseSchema: quizSchema },
-  });
-  return JSON.parse(response.text) as QuizQuestion[];
+  const items: DailyStudyQuizItem[] = [
+    ...words.map((w) => ({ type: "WORD" as const, term: w.word, summary: w.meaning })),
+    ...grammar.map((g) => ({ type: "GRAMMAR" as const, term: g.grammarPoint, summary: g.meaning })),
+  ];
+  if (sourceArticle?.trim()) {
+    items.push({ type: "READING", term: "文章閱讀", content: sourceArticle.trim() });
+  }
+  if (specificPrompt?.trim()) {
+    items.push({
+      type: "WORD",
+      term: specificPrompt.trim(),
+      summary: jlptLevel ? `JLPT ${jlptLevel}` : undefined,
+    });
+  }
+  return generateDailyStudyQuiz(items, questionCount);
 };
 
-/**
- * 學習解析頁面的測驗（AI 即時針對性出題）
- * 嚴格圍繞使用者輸入之單字或文法（例如：「はずです」），由 Gemini API 即時生成 3~5 題針對性練習（包含例句填空、重組題）。
- * 嚴禁從預設的 JLPT 題庫中隨機抓題，100% 命中使用者指定內容！
- */
 export const generateTargetedQuiz = async (
   targetItem: string,
   questionCount: number = 3,
   level?: string
 ): Promise<QuizQuestion[]> => {
-  const safeCount = Math.max(3, Math.min(questionCount || 3, 5));
-  const cleanTarget = targetItem.trim();
-
-  const prompt = `
-    You are an elite Japanese language teacher and JLPT exam designer.
-    
-    TARGET FOCUS FOR THIS QUIZ:
-    The student has entered the specific Japanese word or grammar pattern: "${cleanTarget}".
-    
-    CRITICAL MANDATE:
-    Generate EXACTLY ${safeCount} questions (between 3 and 5 questions) that STRICTLY and 100% REVOLVE AROUND "${cleanTarget}".
-    
-    RULES FOR TARGETED QUIZ (嚴格針對特定單字/文法出題):
-    1. 100% TARGET RELEVANCE:
-       - Every single question must directly test the student's mastery of "${cleanTarget}".
-       - DO NOT produce generic or unrelated JLPT questions! Under NO circumstances fallback to unrelated preset topics.
-       - If "${cleanTarget}" is a grammar pattern (e.g. "はずです", "～わけにはいかない", "～てたまらない", "～ようになっている"):
-         - Test connection rules (接續：動詞普通形、名詞+の、形容詞接續等).
-         - Test contextual nuances (推測、客觀依據、講者態度) and negative forms (e.g. はずがない vs はずではない).
-         - Include natural conversation dialogs and sentences with "___" where "${cleanTarget}" is tested.
-       - If "${cleanTarget}" is a vocabulary item (e.g. "気にする", "約束", "準備", "複雑"):
-         - Test collocations, particle pairings, nuance vs synonyms, kanji readings, and fill-in-the-blank.
-    
-    2. QUESTION FORMAT VARIETY:
-       - 1-2 sentence fill-in-the-blank questions (type: "grammar" or "vocab") where the blank "___" tests "${cleanTarget}" or its connection.
-       - At least 1 sentence reordering question (type: "ordering") that features "${cleanTarget}" or its grammatical components within the 4 scramble items.
-    
-    3. STRICT ORDERING QUESTION REQUIREMENTS (唯一解約束):
-       - For ordering questions (星號題 / 並び替え):
-         - The 4 scramble items MUST have ONE AND ONLY ONE mathematically and grammatically possible sequence (4! = 24 種組合中僅有 1 種合法順序，全宇宙唯一解).
-         - The sentence stem MUST provide preceding context (e.g. "（真面目な山田さんのことだから、）\\n会議の資料は ①＿＿ ②＿＿ ③★＿＿ ④＿＿ はずです。").
-         - Separate fields cleanly:
-           - 'sentence': Template sentence with preceding context and numbered underlines.
-           - 'scrambleItems': Array of 4 clean string fragments (without "1." prefix or trailing periods).
-           - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
-         - NEVER output raw literal "\\n" text in strings.
-         - 'options' must correspond to the 4 items, with 'correctAnswerIndex' identifying the item in the ★ slot.
-    
-    4. CRITICAL ANTI-SPOILER RULE:
-       - Keep 'context' field empty ("") for all questions! Never put the unblanked sentence or answer in 'context'.
-    
-    5. LEVEL & EXPLANATIONS:
-       - Target approximately JLPT ${level || 'N3'} difficulty.
-       - Provide crystal-clear, detailed explanations in Traditional Chinese (繁體中文, 台灣) detailing why the correct option is right and why the other 3 distractors are grammatically/contextually invalid.
-       
-    Return exactly ${safeCount} questions.
-  `;
-
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: prompt,
-    config: { responseMimeType: "application/json", responseSchema: quizSchema },
-  });
-
-  return JSON.parse(response.text) as QuizQuestion[];
+  const safeCount = questionCount <= 3 ? 3 : 5;
+  return generateDailyStudyQuiz(
+    [{ type: "WORD", term: targetItem.trim(), summary: level ? `JLPT ${level}` : undefined }],
+    safeCount
+  );
 };
 
-export interface DailyStudyQuizItem {
-  type: 'WORD' | 'GRAMMAR' | 'READING';
-  term: string;
-  summary?: string;
-  detail?: string;
-  content?: string; // Full Japanese article text for READING items
-}
-
-/**
- * 當日學習測驗專區：AI 即時針對性出題
- * 根據使用者當天勾選的單字、文法、文章項目，由 Gemini API 即時生成針對性測驗。
- * 涵蓋：單字拆解題、拼音題、重組題（星號題）、文章理解題、聽力題。
- */
-export const generateDailyStudyQuiz = async (
-  items: DailyStudyQuizItem[],
-  questionCount: number = 10
-): Promise<QuizQuestion[]> => {
-  const safeCount = Math.max(3, Math.min(questionCount || 10, 15));
-  const itemsDescription = items.map((it, idx) => {
-    let desc = `${idx + 1}. [${it.type}] ${it.term}${it.summary ? ` (${it.summary})` : ''}`;
-    if (it.content) {
-      desc += `\n   [FULL ARTICLE PASSAGE / 原文本文]:\n${it.content}`;
-    } else if (it.detail) {
-      desc += ` - ${it.detail}`;
-    }
-    return desc;
-  }).join('\n\n');
-
-  const prompt = `
-    You are an expert Japanese educator and exam creator for "日本語ごご！".
-    DAILY STUDY QUIZ:
-    The student has chosen the following specific items studied today to test:
-    ${itemsDescription}
-
-    TASK:
-    Generate EXACTLY ${safeCount} focused questions testing DIRECTLY the items above.
-    
-    CRITICAL MANDATE - QUESTION TYPE PROPORTIONS (大幅提高「重組題」與「文章理解題」出題佔比 - 核心要求):
-    - 「重組題（星號題, type: 'ordering'）」與「文章理解題 (type: 'reading')」必須優先出題，且合計必須佔據全部題目總數的 70% 以上！
-    - 具體分配規範：
-      * 若總題數為 3 題：至少 1 題 ordering、至少 1 題 reading、其餘 1 題為單字或文法題。
-      * 若總題數為 5 題：至少 2 題 ordering、至少 2 題 reading、其餘 1 題為單字/文法/聽力題。
-      * 若總題數為 10 題：至少 4 題 ordering、至少 4 題 reading、其餘 2 題為單字/文法/聽力題。
-      * 若總題數為 15 題：至少 6 題 ordering、至少 6 題 reading、其餘 3 題為單字/文法/聽力題。
-    - 即使使用者勾選的項目僅有單字或文法，亦必須運用這些詞彙文法設計自然的 3~5 句日文短文/對話情境於 'context' 中出文章閱讀題，並設計包含這些詞彙文法的星號重組題！
-
-    CRITICAL QUESTION TYPES & STRICT FIELD SPECIFICATIONS:
-    1. 單字拆解題 / 字彙與文法用法題 (type: "vocab" or "grammar"):
-       - 'instruction': "下線の言葉の用法や意味として最も適当なものを選びなさい。"
-       - 'question': A complete, natural Japanese sentence containing the target word or grammar, with the target word/grammar strictly enclosed in brackets like 【単語】 or 【文法】!
-       - MANDATORY CONSTRAINT: 'question' MUST be the actual Japanese sentence (e.g. "このアパートは駅から近い【し】、家賃も安い【し】、とても気に入っています。" or "彼には特別な【才能】がある。").
-       - FATAL ERROR PROHIBITION: NEVER set 'question' to "下線の言葉の用法や意味として最も適当なものを選びなさい。"! That is an instruction, NOT a question. If you do this, the user cannot see which word or sentence is being asked about! The instruction goes strictly in 'instruction', and the Japanese sentence goes strictly in 'question'.
-       - 'questionTranslation': Natural Traditional Chinese translation of the Japanese sentence.
-
-    2. 拼音題 (type: "vocab"):
-       - 'instruction': "下線部の漢字の正しい読み方（拼音）を選びなさい。"
-       - 'question': A complete, natural Japanese sentence with the target kanji enclosed in brackets 【 】, e.g. "彼との【約束】を忘れてはいけない。"
-       - 'questionTranslation': Natural Traditional Chinese translation of the Japanese sentence.
-
-    3. 重組題（星號題）(type: "ordering"):
-       - 'instruction': "★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。"
-       - 'sentence': Clean sentence with context and underlines, e.g. "（駅の改札が混雑中なので、）①＿＿ ②＿＿ ③★＿＿ ④＿＿ 行きましょう。" (DO NOT include literal '\\n' or duplicate candidate blocks).
-       - 'scrambleItems': Array of 4 clean string fragments (without numeric prefixes like 1. or trailing periods).
-       - STRICT RULE: 4! = 24 unique valid solution. All other 23 permutations must be grammatically or logically invalid.
-       - 'options' matching the 4 items, with 'correctAnswerIndex' pointing to the item in the ★ slot.
-
-    4. 文章理解題 (type: "reading"):
-       - 'instruction': "文章を読んで、次の問いに最も適した答えを選びなさい。"
-       - 'context': The Japanese reading passage. (MANDATORY REQUIREMENT: You MUST provide the full Japanese reading passage here! If the student studied an article, copy that article or relevant paragraphs into 'context'. If no article was provided, create a vivid 3-5 sentence Japanese scenario/dialogue/short passage in 'context'. The student MUST have the passage to read before answering. NEVER return an empty 'context'!)
-       - 'question': The specific comprehension question about the passage (e.g. "筆者が新しいアパートを気に入っている理由として、文章で述べられていないものはどれですか。").
-       - 'questionTranslation': Natural Traditional Chinese translation of the question.
-
-    5. 聽力/語音題 (type: "listening"):
-       - 'instruction': "会話を聞いて、質問に最も適した答えを選びなさい。"
-       - 'transcript': Clean Japanese dialogue without any HTML, XML, or SSML tags.
-       - 'dialogueLines': Provided with speaker, text, and gender ("male" | "female").
-       - 'question': The question about the dialogue.
-       - 'questionTranslation': Natural Traditional Chinese translation of the question.
-
-    CRITICAL PRESENTATION & CLEANLINESS RULES:
-    - ABSOLUTE SEPARATION OF QUESTION & INSTRUCTION: Never merge instructions or options into 'question' or 'sentence'. Put instructions strictly in 'instruction'.
-    - STRICT PROHIBITION ON CODE TEXT: NEVER output any code tags, backticks, literal '\\n', markdown code blocks, JSON keys, or programming artifacts inside questions, sentences, instructions, or options.
-    - STRICT ANTI-EMOJI RULE: NEVER output any emoji in any fields. Zero emojis!
-    - Return exactly ${safeCount} questions.
-    - All explanations in Traditional Chinese (繁體中文).
-  `;
-
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: prompt,
-    config: { responseMimeType: "application/json", responseSchema: quizSchema },
-  });
-
-  const parsed = JSON.parse(response.text) as QuizQuestion[];
-
-  // 核心防護：確保文章閱讀題 100% 具備閱讀短文本文，杜絕空 context 導致無文章可讀的致命缺陷
-  const studiedReadingItem = items.find(it => it.type === 'READING' && it.content && it.content.trim().length > 20);
-  const fallbackArticleContent = studiedReadingItem?.content?.trim() || '';
-
-  return parsed.map((q) => {
-    const isReading =
-      q.type === 'reading' ||
-      q.subType === 'reading' ||
-      Boolean(q.instruction && q.instruction.includes('文章を読んで')) ||
-      Boolean(q.question && (q.question.includes('筆者') || q.question.includes('文章') || q.question.includes('本文')));
-
-    if (isReading) {
-      q.type = 'reading';
-      q.subType = 'reading';
-      if (!q.context || q.context.trim().length < 20) {
-        if (fallbackArticleContent) {
-          q.context = fallbackArticleContent;
-        } else {
-          // 智能依題目與選項生成情境完整短文
-          const correctOpt = q.options && q.options[q.correctAnswerIndex] ? q.options[q.correctAnswerIndex] : '';
-          if (q.question?.includes('本') || q.question?.includes('購入')) {
-            q.context = `先週、駅前の書店に立ち寄ったときのことだ。普段はあまり本を衝動買いすることはないのだが、棚に並んでいた一冊の本の表紙イラストに強く惹かれて、気がつけばレジでその本を購入していた。家に帰ってから読み始めると、中身も想像以上に面白く、本当に買ってよかったと満足している。`;
-          } else if (q.question?.includes('アパート') || q.question?.includes('部屋')) {
-            q.context = `最近、新しく引っ越したアパートがとても気に入っています。駅から近くて毎日の通勤が楽になっただけでなく、家賃も以前よりずっと安くなりました。周囲は緑が多くて静かな住宅街で、日当たりも良く快適に暮らしています。`;
-          } else {
-            q.context = `先日の出来事について述べます。ある日の午後、新しい体験をするために近くの施設を訪れました。そこで得られた最も印象的な結果は「${correctOpt || '予想以上の充実した成果'}」でした。周囲の人々もその点に共感しており、今後もこのような機会を大切にしていきたいと感じています。`;
-          }
-        }
-      }
-    }
-    return q;
-  });
-};
-
-
-
-// --- LISTENING SCHEMA ---
+// ==========================================
+// 6. 聽力練習與日記批改
+// ==========================================
 const listeningSchema = {
   type: Type.OBJECT,
   properties: {
@@ -1508,12 +830,11 @@ const listeningSchema = {
       items: {
         type: Type.OBJECT,
         properties: {
-          text: { type: Type.STRING, description: "One sentence or short natural segment" },
-          reading: { type: Type.STRING, description: "Full hiragana/katakana reading" },
-          translation: { type: Type.STRING, description: "Traditional Chinese translation" },
+          text: { type: Type.STRING },
+          reading: { type: Type.STRING },
+          translation: { type: Type.STRING },
           tokens: {
             type: Type.ARRAY,
-            description: "Vocabulary and grammar analysis for this segment",
             items: {
               type: Type.OBJECT,
               properties: {
@@ -1523,11 +844,11 @@ const listeningSchema = {
                 meaning: { type: Type.STRING },
                 type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] },
                 jlpt: { type: Type.STRING, enum: ["N5", "N4", "N3", "N2", "N1", "Unknown"] },
-                partOfSpeech: { type: Type.STRING, description: "e.g. 名詞, 動詞, 形容詞" }
+                partOfSpeech: { type: Type.STRING },
               },
-              required: ["text", "dictionaryForm", "reading", "meaning", "type", "jlpt", "partOfSpeech"]
-            }
-          }
+              required: ["text", "dictionaryForm", "reading", "meaning", "type", "jlpt", "partOfSpeech"],
+            },
+          },
         },
         required: ["text", "reading", "translation", "tokens"],
       },
@@ -1537,114 +858,64 @@ const listeningSchema = {
 };
 
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Generate a JLPT ${level} listening practice material. Style: JLPT conversation or short interesting article. CRITICAL DIALOGUE TRANSCRIPT CLEANLINESS: The dialogue transcript must NOT contain any XML/HTML/SSML tags (strictly NO <prosody>, NO </prosody>). Use only pure speaker lines like "女：..." and "男：...". Break it into natural sentences/segments. Traditional Chinese translation.`,
-    config: { responseMimeType: "application/json", responseSchema: listeningSchema },
-  });
-  return { ...JSON.parse(response.text), level };
+  const prompt = `生成 JLPT ${level} 日文聽力對話練習（純淨男女對話，嚴禁任何 XML/HTML/SSML 標籤，行首使用「女：」「男：」），附逐句假名、繁中翻譯與重點詞彙。`;
+  const data = await callGeminiJson<any>(prompt, listeningSchema, "聽力教材生成");
+  return { ...data, level };
 };
 
 export const checkListeningAnswer = async (correctText: string, userInput: string): Promise<any> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `Compare Japanese texts. Correct: "${correctText}". User input: "${userInput}". Calculate similarity (0-100) and provide encouraging feedback in Traditional Chinese.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          correct: { type: Type.BOOLEAN },
-          similarity: { type: Type.NUMBER },
-          feedback: { type: Type.STRING },
-        },
-        required: ["correct", "similarity", "feedback"],
-      },
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      correct: { type: Type.BOOLEAN },
+      similarity: { type: Type.NUMBER },
+      feedback: { type: Type.STRING },
     },
-  });
-  return JSON.parse(response.text);
+    required: ["correct", "similarity", "feedback"],
+  };
+  const prompt = `比對聽寫日文。正解：「${correctText}」；作答：「${userInput}」。計算相似度(0-100)並以繁體中文簡潔回饋。`;
+  return callGeminiJson<any>(prompt, schema, "聽寫比對");
 };
 
-// --- DIARY CORRECTION SCHEMA ---
 const diaryAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
-    title: { type: Type.STRING, description: "Suggest a suitable, poetic, or descriptive title in Japanese for this diary entry. (Optional: provide Traditional Chinese translation alongside, e.g., 「雨の日（雨天）」)" },
-    correctedFullText: { type: Type.STRING, description: "The fully polished and corrected Japanese diary passage. CRITICAL: You MUST strictly match and preserve the user's custom line breaks (\\n) and paragraph layout. If the user has sentences separated to different lines, make sure the corrected equivalents are placed on equivalent line breaks so both side-by-side versions match up perfectly." },
-    overallFeedback: { type: Type.STRING, description: "Warm, professional feedback in Traditional Chinese on their writing style, vocabulary, and grammar" },
-    jlptEstimatedLevel: { type: Type.STRING, description: "Estimated JLPT level of this text (e.g., N5, N4, N3)" },
+    title: { type: Type.STRING },
+    correctedFullText: { type: Type.STRING },
+    overallFeedback: { type: Type.STRING },
+    jlptEstimatedLevel: { type: Type.STRING },
     corrections: {
       type: Type.ARRAY,
-      description: "Sentence-by-sentence analysis of corrections. CRITICAL: ONLY generate correction entries for sentences that have significant, substantive errors (e.g. wrong grammar, major particle mistakes, or word selection errors/用詞錯誤/大錯誤). If a sentence has NO actual mistakes or only has extremely minor tweaks (like changing one word just for slightly better flow, or a basic punctuation fix), do NOT include it here. It is much better to have 0 or 1 significant correction cards than to show boring minor stylistic nitpicks.",
       items: {
         type: Type.OBJECT,
         properties: {
-          originalText: { type: Type.STRING, description: "The original Japanese sentence written by the user" },
-          correctedText: { type: Type.STRING, description: "The corrected and polished Japanese sentence." },
-          explanation: { type: Type.STRING, description: "Direct and clear explanation in Traditional Chinese of why this error is incorrect and how to fix it." },
-          grammarPoints: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Key grammar patterns or vocabulary terms introduced or corrected in this sentence"
-          }
+          originalText: { type: Type.STRING },
+          correctedText: { type: Type.STRING },
+          explanation: { type: Type.STRING },
+          grammarPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ["originalText", "correctedText", "explanation"]
-      }
+        required: ["originalText", "correctedText", "explanation"],
+      },
     },
     vocabGrammarList: {
       type: Type.ARRAY,
-      description: "List of 3-5 critical vocabulary and grammar expressions from this diary to save/learn",
       items: {
         type: Type.OBJECT,
         properties: {
-          expression: { type: Type.STRING, description: "The word or grammar pattern" },
-          reading: { type: Type.STRING, description: "Hiragana/Katakana reading" },
-          meaning: { type: Type.STRING, description: "Meaning in Traditional Chinese" },
-          type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] }
+          expression: { type: Type.STRING },
+          reading: { type: Type.STRING },
+          meaning: { type: Type.STRING },
+          type: { type: Type.STRING, enum: ["VOCAB", "GRAMMAR"] },
         },
-        required: ["expression", "reading", "meaning", "type"]
-      }
-    }
+        required: ["expression", "reading", "meaning", "type"],
+      },
+    },
   },
-  required: ["title", "correctedFullText", "overallFeedback", "jlptEstimatedLevel", "corrections"]
+  required: ["title", "correctedFullText", "overallFeedback", "jlptEstimatedLevel", "corrections"],
 };
 
 export const fetchDiaryCorrection = async (content: string): Promise<DiaryAnalysisResult> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-4-hydrogen",
-    contents: `
-      You are an expert Japanese language tutor who corrects student diaries, specializing in teaching beginners and intermediate learners (specifically JLPT N4/N5 level).
-      Please analyze and correct this Japanese diary entry written by a student:
-      
-      "${content}"
-      
-      CRITICAL LEVEL RESTRICTION (N4/N5 Focus):
-      The corrections, polished sentences, suggested vocabulary, and grammar points MUST be tailored for a JLPT N4/N5 level learner:
-      1. Do NOT use advanced/formal/difficult vocabulary (N1/N2). At most, use common or helpful N3 level vocabulary/grammar if absolutely necessary for naturalness. Keep all words and grammar patterns friendly, simple, standard, and highly practical.
-      2. Do NOT over-correct. Keep the student's original tone, context, and ideas intact. Avoid turning simple, warm daily diary thoughts into cold, overly formal, high-level academic or technical written Japanese.
-      3. Polished sentences should sound natural, fluent, and idiomatic, but remain accessible and reading-friendly (mostly using N4/N5 vocabulary).
-      4. The 3-5 vocabulary or grammar points extracted MUST be simple, practical everyday words or grammar patterns that are highly useful for beginners or intermediate (N4/N5) Japanese learners to learn and build dialogue with.
-      
-      CRITICAL CORRECTION CARD SELECTION CONSTRAINT:
-      1. ONLY create items in the "corrections" list if the sentence contains an actual SIGNIFICANT spelling error, wrong particle usage, grammatically invalid structure, or severe word choice misuse (用詞錯誤、大錯誤).
-      2. If a sentence is grammatically correct and has NO major mistakes, do NOT include it in the "corrections" list.
-      3. Minor improvements (e.g. changing one character for a slightly "better" stylistic flow, adding minor particles that are optional, or choosing a slightly nicer synonym) SHOULD NOT be generated in the "corrections" list. Just apply these silent tweaks directly to the "correctedFullText" passage. Keep the corrections list clean so the user doesn't get overwhelmed with trivial style critiques. Always make sure the final corrected text stands out clearly so the user can easily observe the full diary context.
-      
-      Tasks:
-      1. Correct all spelling, grammar, particles, and vocabulary errors based on the N4/N5 level.
-      2. Polish the sentences to make them sound like natural, idiomatic but simple and accessible Japanese (using N4/N5 friendly, polite or casual diary style, such as using -desu/-masu consistently unless they wrote casual).
-      3. CRITICAL LAYOUT MATCHING: The correctedFullText MUST preserve the exact paragraph breaks, vertical whitespace, and manual line-break structure (\n) of the original student submission. If the original text is formatted sentence-by-sentence, or has custom paragraph spacings/bullet structures, the corrected version MUST correspond line-for-line to match that layout perfectly. Avoid merging independent lines into flat block paragraphs.
-      4. Provide detailed sentence-by-sentence corrections and explanations in Traditional Chinese (Taiwan) ONLY for sentences with actual major errors.
-      5. Extract 3-5 suitable beginner/intermediate (N4/N5, at most N3) vocabulary words or grammar points from their diary with readings and Traditional Chinese meanings.
-      6. Provide an overall encouragement score/grade/feedback in Traditional Chinese, acknowledging their current level.
-     `,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: diaryAnalysisSchema,
-    },
-  });
-  return JSON.parse(response.text) as DiaryAnalysisResult;
+  const prompt = `批改初學者（N5~N4程度）的日文日記，保持原意與換行排版（\\n），僅針對明顯錯誤提供繁體中文修正說明，並整理 3~5 個實用單字文法，無 Emoji：
+「${content}」`;
+  return callGeminiJson<DiaryAnalysisResult>(prompt, diaryAnalysisSchema, "日記批改");
 };
-
-
-

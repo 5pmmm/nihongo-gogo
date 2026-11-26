@@ -127,7 +127,14 @@ export const formatQuestionDisplay = (rawQ: {
     rawInstruction.includes('読み方') ||
     rawQuestion.includes('読み方')
   ) {
-    subTypeLabel = '文字拼音題';
+    subTypeLabel = '漢字讀音題';
+  } else if (
+    rawInstruction.includes('（　）') ||
+    rawInstruction.includes('空欄') ||
+    rawQuestion.includes('___') ||
+    rawQuestion.includes('＿＿')
+  ) {
+    subTypeLabel = '單字選填題';
   }
 
   // ----------------------------------------------------
@@ -282,8 +289,10 @@ export const formatQuestionDisplay = (rawQ: {
 
   // 8. 若無提取出指示，則依子題型給予適切的層級下修提示語
   if (!extractedInstruction) {
-    if (subTypeLabel === '文字拼音題') {
-      extractedInstruction = '下線の言葉の読み方として最も適当なものを選びなさい。';
+    if (subTypeLabel === '漢字讀音題' || subTypeLabel === '文字拼音題') {
+      extractedInstruction = '下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。';
+    } else if (subTypeLabel === '單字選填題') {
+      extractedInstruction = '（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。';
     } else if (sub === 'vocab') {
       extractedInstruction = '下線の言葉の用法や意味として最も適当なものを選びなさい。';
     } else if (sub === 'grammar') {
