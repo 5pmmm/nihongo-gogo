@@ -8,8 +8,10 @@ import {
   SentenceWord,
 } from "../types";
 
-const MODEL_NAME = "gemini-2.5-flash";
-const REQUEST_TIMEOUT_MS = 15000;
+const PRIMARY_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const DEFAULT_TIMEOUT_MS = 20000;
+const QUIZ_TIMEOUT_MS = 35000;
 
 const getGeminiApiKey = (): string => {
   const viteKey =
@@ -31,7 +33,7 @@ let cachedApiKey = "";
 const getAiClient = (): GoogleGenAI => {
   const key = getGeminiApiKey();
   if (!key) {
-    throw new Error("尚未設定 Gemini API 金鑰（請確認環境變數 VITE_GEMINI_API_KEY），無法連線解析。");
+    throw new Error("尚未設定 Gemini API 金鑰（請確認環境變數 VITE_GEMINI_API_KEY）。");
   }
   if (!globalAiInstance || cachedApiKey !== key) {
     globalAiInstance = new GoogleGenAI({ apiKey: key });
@@ -40,7 +42,7 @@ const getAiClient = (): GoogleGenAI => {
   return globalAiInstance;
 };
 
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<T> => {
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -54,65 +56,97 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number = REQUEST_T
   }
 };
 
+const isAuthError = (err: any): boolean => {
+  const status = err?.status || err?.code;
+  const rawMsg = String(err?.message || err || "");
+  return (
+    status === 400 ||
+    status === 403 ||
+    rawMsg.includes("API_KEY_INVALID") ||
+    rawMsg.includes("PERMISSION_DENIED") ||
+    rawMsg.includes("金鑰")
+  );
+};
+
 const mapGeminiError = (err: any, actionLabel: string): Error => {
   if (err?.message === "GEMINI_TIMEOUT") {
-    return new Error(`${actionLabel}連線逾時（超過 15 秒未回應），請稍後再試或檢查網路連線。`);
+    return new Error(`${actionLabel}連線逾時，請稍後再試或檢查網路連線。`);
   }
 
   const rawMsg = String(err?.message || err || "");
   const status = err?.status || err?.code;
 
   if (status === 429 || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota") || rawMsg.includes("429")) {
-    return new Error("目前查詢人數較多或免費 API 額度暫滿，請稍後幾秒再試。");
+    return new Error("目前請求太頻繁，請等 1 分鐘後再試。");
   }
-  if (
-    status === 400 ||
-    status === 403 ||
-    rawMsg.includes("API_KEY_INVALID") ||
-    rawMsg.includes("PERMISSION_DENIED") ||
-    rawMsg.includes("金鑰")
-  ) {
+  if (isAuthError(err)) {
     return new Error("Gemini API 金鑰無效或未設定，請確認 VITE_GEMINI_API_KEY。");
   }
   if (status === 404 || rawMsg.includes("NOT_FOUND")) {
-    return new Error(`無法存取 AI 模型（${MODEL_NAME}），請確認模型設定是否正確。`);
+    return new Error("無法存取指定的 AI 模型，請稍後再試。");
   }
   if (status === 500 || status === 503 || rawMsg.includes("UNAVAILABLE")) {
     return new Error("AI 伺服器暫時忙碌，請稍後幾秒再試。");
   }
 
-  return new Error(rawMsg ? `${actionLabel}失敗：${rawMsg}` : `${actionLabel}失敗，請確認網路連線後再試。`);
+  return new Error(rawMsg ? `${actionLabel}失敗：${rawMsg}` : `${actionLabel}失敗，請稍後再試。`);
 };
 
+const generateJsonWithModel = async <T>(
+  model: string,
+  contents: string,
+  responseSchema: any,
+  timeoutMs: number
+): Promise<T> => {
+  const client = getAiClient();
+  const response = await withTimeout(
+    client.models.generateContent({
+      model,
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema,
+      },
+    }),
+    timeoutMs
+  );
+
+  const rawText = response.text?.trim();
+  if (!rawText) {
+    throw new Error("AI 回傳內容為空，請稍後再試。");
+  }
+
+  return JSON.parse(rawText) as T;
+};
+
+/**
+ * 單次請求呼叫 AI：優先使用 gemini-3.8-flash；若遇忙碌、失敗或無回應（非金鑰錯誤），自動單次備援切換至 gemini-3.5-flash-lite。
+ */
 const callGeminiJson = async <T>(
   contents: string,
   responseSchema: any,
   actionLabel: string,
-  timeoutMs: number = REQUEST_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<T> => {
   try {
-    const client = getAiClient();
-    const response = await withTimeout(
-      client.models.generateContent({
-        model: MODEL_NAME,
-        contents,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema,
-        },
-      }),
-      timeoutMs
-    );
-
-    const rawText = response.text?.trim();
-    if (!rawText) {
-      throw new Error("AI 回傳內容為空，請稍後再試。");
+    return await generateJsonWithModel<T>(PRIMARY_MODEL, contents, responseSchema, timeoutMs);
+  } catch (primaryErr: any) {
+    if (isAuthError(primaryErr)) {
+      console.error(`[日本語ごご！] ${actionLabel}驗證失敗:`, primaryErr);
+      throw mapGeminiError(primaryErr, actionLabel);
     }
 
-    return JSON.parse(rawText) as T;
-  } catch (err: any) {
-    console.error(`[日本語ごご！] ${actionLabel}錯誤:`, err);
-    throw mapGeminiError(err, actionLabel);
+    console.warn(
+      `[日本語ごご！] ${PRIMARY_MODEL} ${actionLabel}失敗，自動切換備援模型 ${FALLBACK_MODEL}:`,
+      primaryErr
+    );
+
+    try {
+      return await generateJsonWithModel<T>(FALLBACK_MODEL, contents, responseSchema, timeoutMs);
+    } catch (fallbackErr: any) {
+      console.error(`[日本語ごご！] 備援模型 ${FALLBACK_MODEL} ${actionLabel}亦失敗:`, fallbackErr);
+      throw mapGeminiError(fallbackErr, actionLabel);
+    }
   }
 };
 
@@ -140,7 +174,7 @@ const writeLocalCache = <T>(mode: "WORD" | "GRAMMAR" | "READING", query: string,
   }
 };
 
-// --- HEPBURN ROMAJI HELPER (用於補全沒有 romaji 的舊快取或缺失欄位) ---
+// --- HEPBURN ROMAJI HELPER ---
 export const toHepburnRomaji = (kana: string): string => {
   if (!kana) return "";
   const h = kana.replace(/[\u30a1-\u30f6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
@@ -278,7 +312,7 @@ const normalizeWordDefinition = (raw: any, index: number): WordDefinition => {
   };
 };
 
-// --- COMPACT SCHEMAS ---
+// --- SCHEMAS ---
 const wordDefinitionSchema = {
   type: Type.ARRAY,
   items: {
@@ -320,10 +354,10 @@ const grammarSchema = {
       grammarPoint: { type: Type.STRING, description: "文法句型" },
       connection: { type: Type.STRING, description: "接續方式（繁體中文）" },
       meaning: { type: Type.STRING, description: "核心中文語意" },
-      explanation: { type: Type.STRING, description: "簡潔精準的用法與語氣說明（繁體中文）" },
+      explanation: { type: Type.STRING, description: "簡潔用法說明（繁體中文）" },
       examples: {
         type: Type.ARRAY,
-        description: "2句實用例句與重點詞彙整理",
+        description: "2句實用例句",
         items: {
           type: Type.OBJECT,
           properties: {
@@ -356,10 +390,10 @@ const readingSchema = {
   properties: {
     title: { type: Type.STRING, description: "文章標題" },
     content: { type: Type.STRING, description: "日文原文" },
-    translation: { type: Type.STRING, description: "流暢的繁體中文逐句對照翻譯" },
+    translation: { type: Type.STRING, description: "繁體中文翻譯" },
     tokens: {
       type: Type.ARRAY,
-      description: "萃取重點單字與文法",
+      description: "重點單字與文法",
       items: {
         type: Type.OBJECT,
         properties: {
@@ -399,20 +433,20 @@ const quizSchema = {
     properties: {
       id: { type: Type.STRING },
       type: { type: Type.STRING, enum: ["vocab", "grammar", "ordering", "reading"] },
-      context: { type: Type.STRING, description: "閱讀題短文本文（僅 reading 題型填寫 80~120 字日文短文，其餘題型留空字串）" },
+      context: { type: Type.STRING, description: "僅 reading 題型填寫 80~120 字獨立日文短文，其餘題型留空字串" },
       instruction: { type: Type.STRING, description: "JLPT 作答指示語" },
-      question: { type: Type.STRING, description: "題幹句子（漢字讀音用【漢字】標示，填空用 ___，重組用 ①＿＿ ②＿＿ ③★＿＿ ④＿＿）" },
-      sentence: { type: Type.STRING, description: "重組題專用：含前置語境與 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 的完整句型" },
+      question: { type: Type.STRING, description: "題幹句子（漢字讀音用【漢字】、填空用 ___、重組用 ①＿＿ ②＿＿ ③★＿＿ ④＿＿）" },
+      sentence: { type: Type.STRING, description: "重組題專用：含前置語境與 ①＿＿ ②＿＿ ③★＿＿ ④＿＿" },
       scrambleItems: {
         type: Type.ARRAY,
         items: { type: Type.STRING },
-        description: "重組題專用：4 個純詞段（無編號、無句號）",
+        description: "重組題專用：4 個純詞段",
       },
-      questionReading: { type: Type.STRING, description: "題幹完整平假名讀音" },
+      questionReading: { type: Type.STRING, description: "題幹平假名讀音" },
       questionTranslation: { type: Type.STRING, description: "題幹繁體中文翻譯" },
-      options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 個純文字選項（無 A/B/C/D 或 1/2/3/4 前綴）" },
+      options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "4 個純文字選項（無 A/1 前綴、無結尾句號）" },
       correctAnswerIndex: { type: Type.INTEGER, description: "正解索引 0~3" },
-      explanation: { type: Type.STRING, description: "精準繁體中文詳解" },
+      explanation: { type: Type.STRING, description: "繁體中文詳解" },
     },
     required: [
       "id",
@@ -429,7 +463,7 @@ const quizSchema = {
 };
 
 // ==========================================
-// 1. 單字查詢（LocalStorage 快取 + Gemini 2.5 Flash）
+// 1. 單字查詢（LocalStorage 快取 + 單次 AI 解析）
 // ==========================================
 export const fetchWordDefinitions = async (query: string): Promise<WordDefinition[]> => {
   const queryStr = query.trim();
@@ -440,11 +474,8 @@ export const fetchWordDefinitions = async (query: string): Promise<WordDefinitio
     return cached.map((item, idx) => normalizeWordDefinition(item, idx));
   }
 
-  const prompt = `解析日文單字：「${queryStr}」（若有多個詞請逐一解析）。
-要求：
-1. word(漢字或原詞)、furigana(平假名)、romaji(赫本拼音)、meanings(繁體中文釋義陣列)、pitch(重音數字如"0","1")、partOfSpeech(詞性)。
-2. examples：1~2句自然實用例句（sentence, reading, translation繁體中文）。
-3. 嚴禁任何表情符號(Emoji)，回覆精簡勿贅述。`;
+  const prompt = `解析日文單字：「${queryStr}」。
+請用繁體中文精簡輸出：word(原詞)、furigana(平假名)、romaji(羅馬拼音)、meanings(中文釋義陣列)、pitch(重音數字)、partOfSpeech(詞性)、examples(1~2句日文例句含 reading 與繁中 translation)。嚴禁 Emoji。`;
 
   const rawList = await callGeminiJson<any[]>(prompt, wordDefinitionSchema, "單字解析");
   if (!Array.isArray(rawList) || rawList.length === 0) {
@@ -459,7 +490,7 @@ export const fetchWordDefinitions = async (query: string): Promise<WordDefinitio
 export const lookupJapanese = fetchWordDefinitions;
 
 // ==========================================
-// 2. 文法解析（LocalStorage 快取 + Gemini 2.5 Flash）
+// 2. 文法解析（LocalStorage 快取 + 單次 AI 解析）
 // ==========================================
 export const fetchGrammarDetails = async (grammarInput: string): Promise<GrammarDefinition[]> => {
   const queryStr = grammarInput.trim();
@@ -471,14 +502,11 @@ export const fetchGrammarDetails = async (grammarInput: string): Promise<Grammar
   }
 
   const prompt = `解析日文文法：「${queryStr}」。
-要求（繁體中文、精簡清晰）：
-1. grammarPoint(標準句型)、connection(接續規則)、meaning(核心語意)、explanation(語氣與使用注意)。
-2. examples：2句自然例句，含 sentence、reading(平假名)、translation(繁中) 及 2~3 個 breakdown 重點單字。
-3. 嚴禁 Emoji。`;
+請以繁體中文精簡提供：grammarPoint(句型)、connection(接續方式)、meaning(核心語意)、explanation(用法說明)、examples(2句例句含 sentence、reading、translation 與 2~3 個 breakdown 重點單字)。嚴禁 Emoji。`;
 
   const data = await callGeminiJson<any[]>(prompt, grammarSchema, "文法解析");
   if (!Array.isArray(data) || data.length === 0) {
-    throw new Error(`找不到「${queryStr}」的文法解析結果，請確認輸入後再試。`);
+    throw new Error(`找不到「${queryStr}」的文法解析結果，請確認輸入內容後再試。`);
   }
 
   const formatted: GrammarDefinition[] = data.map((d, i) => ({
@@ -491,7 +519,7 @@ export const fetchGrammarDetails = async (grammarInput: string): Promise<Grammar
 };
 
 // ==========================================
-// 3. 文章解析（LocalStorage 快取 + Gemini 2.5 Flash）
+// 3. 文章解析（LocalStorage 快取 + 單次 AI 解析）
 // ==========================================
 export const analyzeReadingText = async (input: string): Promise<ReadingMaterial> => {
   const queryStr = input.trim();
@@ -504,11 +532,9 @@ export const analyzeReadingText = async (input: string): Promise<ReadingMaterial
     return cached;
   }
 
-  const prompt = `解析以下日文文章（精簡清晰、繁體中文、嚴禁 Emoji）：
+  const prompt = `解析以下日文文章（繁體中文、精簡清晰、嚴禁 Emoji）：
 「${queryStr}」
-要求：
-1. title(簡潔標題)、content(完整原文)、translation(流暢繁中翻譯)。
-2. tokens：萃取文章重點單字(VOCAB)與文法(GRAMMAR)，提供 dictionaryForm、reading、meaning、jlpt、partOfSpeech、pitchAccent 與 1 句實用簡短例句(exampleSentence, exampleReading, exampleTranslation)。`;
+提供 title、content(原文)、translation(繁中翻譯)，並萃取重點單字(VOCAB)與文法(GRAMMAR)至 tokens（含 dictionaryForm, reading, meaning, jlpt, partOfSpeech, pitchAccent 及 1 句簡短例句）。`;
 
   const data = await callGeminiJson<Omit<ReadingMaterial, "id">>(prompt, readingSchema, "文章解析");
   if (!data || !data.content) {
@@ -569,13 +595,13 @@ export const fetchRecommendedGrammar = async (
 };
 
 export const generateRecommendedReading = async (level: string): Promise<ReadingMaterial> => {
-  const prompt = `創作一篇適合 JLPT ${level} 的簡短日文生活或文化短文（100~160字），附繁中標題、全文翻譯與重點詞彙文法 tokens，無 Emoji。`;
+  const prompt = `創作一篇適合 JLPT ${level} 的日文短文（100~150字），附繁中標題、翻譯與重點 tokens，無 Emoji。`;
   const data = await callGeminiJson<Omit<ReadingMaterial, "id">>(prompt, readingSchema, "推薦閱讀");
   return { ...data, id: `r-rec-${Date.now()}` };
 };
 
 // ==========================================
-// 5. JLPT 模擬測驗出題（15 題拆為 3 個並行 5 題請求，確保 5 題型均分且不逾時）
+// 5. 極簡測驗出題（單次請求直接生成指定題數，避免超時或爆 RPM）
 // ==========================================
 export interface DailyStudyQuizItem {
   type: "WORD" | "GRAMMAR" | "READING";
@@ -596,7 +622,9 @@ const buildCompactStudyContext = (items: DailyStudyQuizItem[]): { summaryText: s
       }
       terms.push(`[文章] ${it.term}`);
     } else {
-      terms.push(`[${it.type === "GRAMMAR" ? "文法" : "單字"}] ${it.term}${it.summary ? `(${it.summary.slice(0, 30)})` : ""}`);
+      terms.push(
+        `[${it.type === "GRAMMAR" ? "文法" : "單字"}] ${it.term}${it.summary ? `(${it.summary.slice(0, 30)})` : ""}`
+      );
     }
   }
 
@@ -606,13 +634,7 @@ const buildCompactStudyContext = (items: DailyStudyQuizItem[]): { summaryText: s
   };
 };
 
-const QUIZ_COMMON_RULES = `共用規則（嚴格遵守）：
-1. 繁體中文解說與翻譯，嚴禁 Emoji 與任何程式碼字樣（禁止 \\n 字面值、反引號）。
-2. options 固定 4 個純文字選項（禁止 A./1. 等前綴，結尾不可加句號）。
-3. correctAnswerIndex 為 0~3 整數；每題必附 questionReading（平假名）、questionTranslation（繁中）與精準繁中 explanation。`;
-
-const normalizeQuizBatch = (list: QuizQuestion[], prefix: string): QuizQuestion[] => {
-  if (!Array.isArray(list)) return [];
+const normalizeQuizQuestions = (list: QuizQuestion[]): QuizQuestion[] => {
   return list.map((q, idx) => {
     const cleanOptions = Array.isArray(q.options)
       ? q.options.slice(0, 4).map((opt) =>
@@ -630,153 +652,58 @@ const normalizeQuizBatch = (list: QuizQuestion[], prefix: string): QuizQuestion[
 
     return {
       ...q,
-      id: q.id || `${prefix}_${Date.now()}_${idx}`,
+      id: q.id || `q_${Date.now()}_${idx}`,
       options: cleanOptions,
       correctAnswerIndex: safeIdx,
     };
   });
 };
 
-const fetchQuizBatch = async (prompt: string, batchTag: string): Promise<QuizQuestion[]> => {
-  const result = await callGeminiJson<QuizQuestion[]>(prompt, quizSchema, `測驗出題(${batchTag})`);
-  if (!Array.isArray(result) || result.length === 0) {
-    throw new Error(`測驗批次（${batchTag}）未回傳有效題目，請重試。`);
-  }
-  return normalizeQuizBatch(result, batchTag);
-};
-
 export const generateDailyStudyQuiz = async (
   items: DailyStudyQuizItem[],
   questionCount: number = 15
 ): Promise<QuizQuestion[]> => {
+  const safeCount = Math.max(3, Math.min(questionCount || 15, 15));
   const { summaryText, articleText } = buildCompactStudyContext(items);
+
   const focusNote = summaryText
-    ? `測驗核心範圍：${summaryText}${articleText ? `\n參考文章節錄：「${articleText}」` : ""}`
-    : "測驗範圍：JLPT N4~N3 實用日語綜合能力";
+    ? `出題目標內容：${summaryText}${articleText ? `\n參考文章：「${articleText}」` : ""}`
+    : "出題範圍：JLPT N4~N3 實用日語綜合能力";
 
-  // 15 題模式：拆成 3 個並行請求（每次 5 題），強制 5 種題型各 3 題
-  if (questionCount === 15) {
-    const batch1Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（無需文章 context，context 留空字串 ""）：
+  const distributionNote =
+    safeCount === 15
+      ? "題型平均混合共 15 題：漢字讀音題（3題）、單字填空題（3題）、文法助詞題（3題）、句子排序題（3題）、短文理解題（3題）。"
+      : safeCount === 10
+      ? "題型平均混合共 10 題：漢字讀音題（2題）、單字填空題（2題）、文法助詞題（2題）、句子排序題（2題）、短文理解題（2題）。"
+      : safeCount === 5
+      ? "題型平均混合共 5 題：漢字讀音、單字填空、文法助詞、句子排序、短文理解各 1 題。"
+      : "共 3 題：漢字讀音題 1 題、句子排序題 1 題、短文理解題 1 題。";
+
+  const prompt = `你是專業 JLPT 日語教師，請透過「單次生成」設計剛好 ${safeCount} 題多元日文選擇題。
 ${focusNote}
 
-題型配額（共 5 題）：
-- 第 1~3 題（3 題漢字讀音題, type:"vocab"）：instruction 固定為「下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。」。question 為完整自然日文句子並將目標漢字以【漢字】框出，options 為 4 個平假名。
-- 第 4~5 題（2 題單字選填題, type:"vocab"）：instruction 固定為「（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。question 為完整日文句子並以 ___ 挖空，選出最合文意的單字。
+【題型分配】
+${distributionNote}
 
-${QUIZ_COMMON_RULES}
-請回傳剛好 5 題。`;
+【各題型規格】
+1. 漢字讀音題 (type:"vocab")：context 留空 ""；instruction 為「下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。」；question 為完整日文句並以【漢字】標示目標字詞；options 為 4 個平假名。
+2. 單字填空題 (type:"vocab")：context 留空 ""；instruction 為「（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。」；question 含 ___ 挖空，選出最合文意的單字。
+3. 文法助詞題 (type:"grammar")：context 留空 ""；instruction 為「文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。」；question 含 ___ 挖空，測試助詞、接續詞或動詞變化。
+4. 句子排序題 (type:"ordering")：context 留空 ""；instruction 為「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」；sentence 含前置語境與「①＿＿ ②＿＿ ③★＿＿ ④＿＿」，scrambleItems 與 options 為 4 個詞段且語法唯一解（4!=24 僅 1 種順序合法），correctAnswerIndex 指向 ★ 位置。
+5. 短文理解題 (type:"reading")：instruction 為「文章を読んで、次の問いに最も適した答えを選びなさい。」；每題 context 必須各自撰寫一篇 80~120 字完全獨立、不同生活或職場主題的日文短文（嚴禁重複相同句型模板），question 針對該短文提問。
 
-    const batch2Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（context 留空字串 ""）：
-${focusNote}
+【嚴格規定】
+- options 為 4 個純文字選項（禁止 A./1. 等前綴，結尾不可加句號），correctAnswerIndex 為 0~3。
+- 每題必附 questionReading（平假名）、questionTranslation（繁中）與精簡繁體中文 explanation。
+- 嚴禁 Emoji 與程式碼字樣（禁止 \\n 字面值與反引號）。
+請直接回傳剛好 ${safeCount} 題的 JSON 陣列。`;
 
-題型配額（共 5 題）：
-- 第 1 題（1 題單字選填題, type:"vocab"）：instruction 固定為「（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。question 含 ___ 挖空。
-- 第 2~4 題（3 題文法助詞與接續題, type:"grammar"）：instruction 固定為「文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。」。question 含 ___ 挖空，測試助詞、接續詞或動詞/形容詞變化，干擾項須有明確文法錯誤。
-- 第 5 題（1 題句子重組排序題, type:"ordering"）：instruction 固定為「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」。sentence 須有前置語境並包含「①＿＿ ②＿＿ ③★＿＿ ④＿＿」，scrambleItems 與 options 為 4 個詞段，語法唯一解（4!=24 中僅1種順序合法，嚴禁對稱比較句多解），correctAnswerIndex 指向 ★ 位置詞段。
-
-${QUIZ_COMMON_RULES}
-請回傳剛好 5 題。`;
-
-    const batch3Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗：
-${focusNote}
-
-題型配額（共 5 題）：
-- 第 1~2 題（2 題句子重組排序題, type:"ordering"）：context 留空 ""；instruction 為「★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。」；sentence 須有前置語境並含「①＿＿ ②＿＿ ③★＿＿ ④＿＿」，scrambleItems 與 options 為 4 個詞段，語法唯一解（4!=24 中僅1種順序合法），correctAnswerIndex 指向 ★ 位置。
-- 第 3~5 題（3 題短文閱讀理解題, type:"reading"）：instruction 為「文章を読んで、次の問いに最も適した答えを選びなさい。」。每題必須於 context 撰寫一篇 80~120 字完全獨立、主題截然不同的日本生活或職場短文（例如：第1篇為職場郵件/會議通知、第2篇為日常交通/購物經驗、第3篇為社區公告/季節生活；若有提供參考文章，僅限其中1篇改編使用，其餘2篇必為全新主題），嚴禁重複句型模板。question 為針對該篇短文的精準理解提問。
-
-${QUIZ_COMMON_RULES}
-請回傳剛好 5 題。`;
-
-    const [b1, b2, b3] = await Promise.all([
-      fetchQuizBatch(batch1Prompt, "b1_kanji_vocab"),
-      fetchQuizBatch(batch2Prompt, "b2_vocab_grammar_order"),
-      fetchQuizBatch(batch3Prompt, "b3_order_reading"),
-    ]);
-
-    // 依嚴格題型區間組合：1~3 漢字讀音、4~6 單字選填、7~9 文法、10~12 重組、13~15 短文閱讀
-    const kanjiQs = b1.slice(0, 3).map((q) => ({ ...q, type: "vocab" as const, context: "" }));
-    const vocabFillQs = [...b1.slice(3, 5), ...b2.slice(0, 1)].map((q) => ({
-      ...q,
-      type: "vocab" as const,
-      context: "",
-    }));
-    const grammarQs = b2.slice(1, 4).map((q) => ({ ...q, type: "grammar" as const, context: "" }));
-    const orderingQs = [...b2.slice(4, 5), ...b3.slice(0, 2)].map((q) => ({
-      ...q,
-      type: "ordering" as const,
-      context: "",
-    }));
-    const readingQs = b3.slice(2, 5).map((q) => ({ ...q, type: "reading" as const }));
-
-    const combined = [...kanjiQs, ...vocabFillQs, ...grammarQs, ...orderingQs, ...readingQs];
-    for (const rq of readingQs) {
-      if (!rq.context || rq.context.trim().length < 30) {
-        throw new Error("閱讀題短文生成不完整，請點擊重新生成測驗。");
-      }
-    }
-    return combined;
+  const generated = await callGeminiJson<QuizQuestion[]>(prompt, quizSchema, "測驗出題", QUIZ_TIMEOUT_MS);
+  if (!Array.isArray(generated) || generated.length === 0) {
+    throw new Error("未取得有效測驗題目，請稍後再試。");
   }
 
-  // 10 題模式：拆成 2 個並行 5 題請求（5 題型各 2 題）
-  if (questionCount === 10) {
-    const batch1Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（context 留空 ""）：
-${focusNote}
-配額：
-- 第 1~2 題：漢字讀音題（type:"vocab", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
-- 第 3~4 題：單字選填題（type:"vocab", instruction:"（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
-- 第 5 題：文法助詞與接續題（type:"grammar", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
-${QUIZ_COMMON_RULES}
-回傳剛好 5 題。`;
-
-    const batch2Prompt = `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗：
-${focusNote}
-配額：
-- 第 1 題：文法助詞與接續題（type:"grammar", context:"", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
-- 第 2~3 題：句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含前置語境與 ①＿＿ ②＿＿ ③★＿＿ ④＿＿，scrambleItems/options 4詞段，唯一解）。
-- 第 4~5 題：短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", 每題 context 須各有一篇獨立不同生活/職場主題的 80~120 字日文短文）。
-${QUIZ_COMMON_RULES}
-回傳剛好 5 題。`;
-
-    const [b1, b2] = await Promise.all([
-      fetchQuizBatch(batch1Prompt, "b10_1"),
-      fetchQuizBatch(batch2Prompt, "b10_2"),
-    ]);
-
-    const ordered = [
-      ...b1.slice(0, 2), // 漢字讀音 2
-      ...b1.slice(2, 4), // 單字選填 2
-      ...b1.slice(4, 5), // 文法 1
-      ...b2.slice(0, 1), // 文法 1
-      ...b2.slice(1, 3), // 排序 2
-      ...b2.slice(3, 5), // 閱讀 2
-    ];
-    return ordered;
-  }
-
-  // 5 題或 3 題單批次模式
-  const safeCount = questionCount <= 3 ? 3 : 5;
-  const singlePrompt =
-    safeCount === 3
-      ? `你是 JLPT 出題專家。根據以下內容設計 3 題日文測驗：
-${focusNote}
-配額：
-1. 漢字讀音題（type:"vocab", context:"", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
-2. 句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 且唯一解）。
-3. 短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", context須為獨立生活/職場 80~120 字短文）。
-${QUIZ_COMMON_RULES}
-回傳剛好 3 題。`
-      : `你是 JLPT 出題專家。根據以下內容設計 5 題日文測驗（5 題型各 1 題）：
-${focusNote}
-配額：
-1. 漢字讀音題（type:"vocab", context:"", instruction:"下線部の漢字の読み方として最もよいものを、1・2・3・4 から一つ選びなさい。", question含【漢字】）。
-2. 單字選填題（type:"vocab", context:"", instruction:"（　）に入る最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
-3. 文法助詞與接續題（type:"grammar", context:"", instruction:"文の文法として最もよいものを、1・2・3・4 から一つ選びなさい。", question含 ___）。
-4. 句子重組排序題（type:"ordering", context:"", instruction:"★ に入る最もよいものを、1・2・3・4 から一つ選びなさい。", sentence含 ①＿＿ ②＿＿ ③★＿＿ ④＿＿ 且唯一解）。
-5. 短文閱讀理解題（type:"reading", instruction:"文章を読んで、次の問いに最も適した答えを選びなさい。", context須為獨立生活/職場 80~120 字短文）。
-${QUIZ_COMMON_RULES}
-回傳剛好 5 題。`;
-
-  return fetchQuizBatch(singlePrompt, `single_${safeCount}`);
+  return normalizeQuizQuestions(generated);
 };
 
 export const generateQuizFromContent = async (
@@ -858,7 +785,7 @@ const listeningSchema = {
 };
 
 export const fetchListeningMaterial = async (level: string): Promise<any> => {
-  const prompt = `生成 JLPT ${level} 日文聽力對話練習（純淨男女對話，嚴禁任何 XML/HTML/SSML 標籤，行首使用「女：」「男：」），附逐句假名、繁中翻譯與重點詞彙。`;
+  const prompt = `生成 JLPT ${level} 日文聽力對話練習（純淨男女對話，嚴禁 XML/HTML/SSML 標籤，行首使用「女：」「男：」），附逐句假名、繁中翻譯與重點詞彙。`;
   const data = await callGeminiJson<any>(prompt, listeningSchema, "聽力教材生成");
   return { ...data, level };
 };
